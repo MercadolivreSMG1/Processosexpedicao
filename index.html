@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Monitor de processos Expedição · SMG1</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23FFE600'/%3E%3Crect x='10' y='16' width='30' height='9' rx='4.5' fill='%233483FA'/%3E%3Crect x='10' y='29' width='44' height='9' rx='4.5' fill='%23FFB800' stroke='%2314181F' stroke-width='1.5'/%3E%3Crect x='10' y='42' width='20' height='9' rx='4.5' fill='%2300A650'/%3E%3C/svg%3E">
+<meta name="theme-color" content="#FFE600">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -154,6 +156,10 @@ html[data-tema=escuro] .chip.ok{background:rgba(0,166,80,.14);border-color:rgba(
 /* ---------- histórico ---------- */
 .hist{flex:1;min-height:0;overflow:auto;padding:14px 20px 8px}
 .hist .pp{max-width:760px}
+#alerta{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:11px;font:500 13px Inter;
+  background:#FFF5F6;border:1px solid #FFC2C9;color:#96202D}
+html[data-tema=escuro] #alerta{background:rgba(242,61,79,.14);border-color:rgba(242,61,79,.35);color:#FFC7CE}
+#alerta b{font-weight:700}
 .tend{display:flex;align-items:flex-end;gap:10px;height:170px;padding-top:6px}
 .tend .col{flex:1;min-width:34px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:5px}
 .tend .col i{display:block;width:100%;max-width:56px;border-radius:7px 7px 3px 3px;background:linear-gradient(180deg,var(--azul),#6BA6FF)}
@@ -174,8 +180,44 @@ html[data-tema=escuro] .chip.ok{background:rgba(0,166,80,.14);border-color:rgba(
 .vazio b{display:block;font:600 17px 'Space Grotesk';color:var(--tinta);margin-bottom:7px}
 .oculto{display:none!important}
 
+
+/* anel das ondas */
+.anel{width:46px;height:46px;flex:none;overflow:visible}
+.anel .tr{fill:none;stroke:var(--trilho);stroke-width:5}
+.anel .pr{fill:none;stroke:var(--azul);stroke-width:5;stroke-linecap:round;
+  transform:rotate(-90deg);transform-origin:50% 50%;
+  transition:stroke-dashoffset .9s cubic-bezier(.4,0,.2,1),stroke .4s}
+.anel text{font:600 11.5px 'Space Grotesk';fill:var(--tinta)}
+
+/* entradas e saídas */
+@keyframes entra{from{opacity:0;transform:translateY(10px) scale(.99)}to{opacity:1;transform:none}}
+@keyframes sai{to{opacity:0;transform:translateX(26px);max-height:0;margin:0;padding-top:0;padding-bottom:0}}
+.entra{animation:entra .42s cubic-bezier(.2,.7,.3,1) both}
+.rota.sai{animation:sai .36s ease forwards;overflow:hidden}
+@keyframes sobe{0%{transform:translateY(6px);opacity:.35}100%{transform:none;opacity:1}}
+.met b.sobe{animation:sobe .45s cubic-bezier(.2,.7,.3,1)}
+.seg{transition:width .8s cubic-bezier(.4,0,.2,1),background .3s}
+.rota{transition:background .35s,border-color .35s}
+.rolo{display:flex;flex-direction:column}
+.falt{color:var(--vermelho);font-weight:600}
+.kpi b{transition:color .3s}
+
+/* sequência de processos em etiquetas */
+.seq{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0}
+.seq .p{display:inline-flex;align-items:center;gap:7px;background:var(--superf2);border:1px solid var(--borda);
+  border-left:3px solid var(--cor);border-radius:8px;padding:4px 9px;font:500 11.5px Inter;color:var(--tinta);white-space:nowrap}
+.seq .p b{font:600 12.5px 'Space Grotesk';letter-spacing:-.2px}
+.tab td.fluxo{white-space:normal;min-width:260px}
+
+@media (prefers-reduced-motion:reduce){
+  .entra,.rota.sai,.met b.sobe{animation:none}
+  .seg,.anel .pr{transition:none}
+}
+
 /* ---------- assinatura ---------- */
-.assina{padding:6px 22px 9px;text-align:right;font:500 10.5px/1 Inter;letter-spacing:.35px;color:var(--mudo);opacity:.62}
+.assina{padding:6px 22px 9px;text-align:right;font:500 10.5px/1 Inter;letter-spacing:.35px;color:var(--mudo);opacity:.62;
+  transition:opacity .3s}
+.assina:hover{opacity:1}
 
 /* ---------- dialogo ---------- */
 .dlg{position:fixed;inset:0;z-index:40;background:rgba(10,20,36,.5);display:grid;place-items:center;padding:20px}
@@ -210,6 +252,7 @@ html[data-tema=escuro] .chip.ok{background:rgba(0,166,80,.14);border-color:rgba(
 
   <!-- AO VIVO -->
   <div class="corpo" id="vivo">
+    <div id="alerta" class="oculto"></div>
     <div class="ondas" id="ondas"></div>
     <div class="grade">
       <div class="cx quadro">
@@ -286,6 +329,33 @@ function proc(p){
 }
 
 /* ---------- dados ---------- */
+const cacheRotas = {};   // 'data|ciclo' -> {rev, rotas}
+
+async function fb(caminho){
+  const r = await fetch(cfg.firebase.replace(/\/+$/,'')+caminho,{cache:'no-store'});
+  if (!r.ok) throw new Error('o Firebase respondeu '+r.status);
+  return r.json();
+}
+
+// ao vivo: 1 chamada pequena no nó de resumos + rotas só quando a revisão muda
+async function buscarAoVivo(data){
+  const res = await fb('/monitor-ondas/resumos/'+data+'.json') || {};
+  const nomes = Object.keys(res);
+  if (!nomes.length) return buscarDia(data);          // dias gravados antes desta versão
+  const ciclos = {};
+  nomes.forEach(n=>{ ciclos[n] = Object.assign({ciclo:n, data:data, rotas:{}}, res[n]); });
+  let alvo = estado.ciclo && ciclos[estado.ciclo] ? estado.ciclo
+    : nomes.sort((a,b)=>(res[b].atualizadoEm||0)-(res[a].atualizadoEm||0))[0];
+  const k = data+'|'+alvo, rev = res[alvo].rev;
+  if (cacheRotas[k] && cacheRotas[k].rev === rev) ciclos[alvo].rotas = cacheRotas[k].rotas;
+  else {
+    const rotas = await fb('/monitor-ondas/'+data+'/'+alvo+'/rotas.json') || {};
+    cacheRotas[k] = {rev, rotas};
+    ciclos[alvo].rotas = rotas;
+  }
+  return ciclos;
+}
+
 async function buscarDia(data){
   if (demo) return dadosDemo(data);
   if (cfg.firebase){
@@ -306,7 +376,7 @@ async function diasGravados(){
     try{
       const r = await fetch(cfg.firebase.replace(/\/+$/,'')+'/monitor-ondas.json?shallow=true',{cache:'no-store'});
       if (!r.ok) return [];
-      return Object.keys((await r.json())||{}).sort().reverse();
+      return Object.keys((await r.json())||{}).filter(x=>/^\d{4}-\d{2}-\d{2}$/.test(x)).sort().reverse();
     }catch(e){ return []; }
   }
   const s = new Set();
@@ -315,7 +385,12 @@ async function diasGravados(){
 }
 
 async function carregar(){
-  try{ estado.ciclos = demo ? dadosDemo() : await buscarDia(estado.data); estado.ok = true; estado.erro=''; }
+  try{
+    estado.ciclos = demo ? dadosDemo()
+      : (estado.vista==='vivo' && cfg.firebase) ? await buscarAoVivo(estado.data)
+      : await buscarDia(estado.data);
+    estado.ok = true; estado.erro='';
+  }
   catch(e){ estado.ciclos = {}; estado.ok = false; estado.erro = e.message; }
   const nomes = Object.keys(estado.ciclos);
   if (!estado.ciclo || !estado.ciclos[estado.ciclo])
@@ -345,29 +420,26 @@ function pintar(){
 /* ---------- ao vivo ---------- */
 function pintarVivo(){
   const d = estado.doc;
+  const idade = d && d.atualizadoEm ? (Date.now()-d.atualizadoEm)/60000 : null;
+  const al = $('#alerta');
+  if (idade!=null && idade >= 3){
+    al.classList.remove('oculto');
+    al.innerHTML = `<b>Coleta parada desde ${hhmm(d.atualizadoEm)}</b> — ${Math.round(idade)} min sem dado novo.
+      O favorito pode ter caído com um recarregamento da tela de dispatch: clique nele de novo para retomar.`;
+  } else al.classList.add('oculto');
+
   if (!d){
     $('#ondas').innerHTML=''; $('#kpis').innerHTML=''; $('#porProc').innerHTML='';
-    $('#finalizadas').innerHTML=''; $('#sub').textContent=''; $('#rotas').innerHTML = vazio(); return;
+    $('#finalizadas').innerHTML=''; $('#sub').textContent='';
+    domRotas.clear(); $('#rotas').innerHTML = vazio(); return;
   }
+
   const rotas = Object.values(d.rotas||{});
   const ativas = rotas.filter(r=>!r.finalizada).sort((a,b)=>(b.ttMin||0)-(a.ttMin||0));
   const fins = rotas.filter(r=>r.finalizada).sort((a,b)=>(b.fim||0)-(a.fim||0));
   const r = d.resumo||{};
 
-  $('#ondas').innerHTML = (d.ondas||[]).map(o=>{
-    const tot = (o.pendentes||0)+(o.despachadas||0);
-    const p = tot ? Math.round((o.despachadas||0)/tot*100) : (o.pct||0);
-    const fim = o.pendentes===0;
-    const cor = fim ? 'var(--verde)' : p>=90 ? 'var(--azul)' : 'var(--ambar)';
-    return `<div class="cx onda${fim?' zerada':''}">
-      <div class="anel" style="--p:${fim?100:p};--cor:${cor}"><i>${fim?'✓':p+'%'}</i></div>
-      <div class="txt">
-        <div class="t1">Onda ${o.onda}${o.finalizou?`<small>fechou ${o.finalizou}</small>`:''}</div>
-        <div class="t2">${fim?'Encerrada':(o.pendentes??'–')} <span>${fim?'':'pendentes'}</span></div>
-        <div class="t3">${o.despachadas??'–'}${fim?'':` de ${tot||'–'}`} despachadas</div>
-      </div></div>`;
-  }).join('') || `<div class="cx onda"><div class="txt"><div class="t1">Sem ondas lidas</div>
-      <div class="t2"><span>o favorito ainda não achou os cartões de onda na tela</span></div></div></div>`;
+  sincronizarOndas(d.ondas||[]);
 
   const fora = ativas.filter(x=>(x.ttMin||0)>=LIMITES.critico || (/aduana/i.test(x.processo||'') && (x.tpMin||0)>=LIMITES.aduana)).length;
   $('#kpis').innerHTML =
@@ -376,8 +448,8 @@ function pintarVivo(){
     kpi(min(r.mediaTotalMin),'tempo médio total','min')+
     kpi(fora,'fora do limite','',fora>0);
 
-  $('#sub').textContent = `${ativas.length} rotas · maior tempo primeiro`;
-  $('#rotas').innerHTML = ativas.length ? ativas.map(linha).join('') : vazio('Nenhuma rota em processo neste momento.');
+  $('#sub').textContent = ativas.length ? `${ativas.length} rotas · maior tempo primeiro` : '';
+  sincronizarRotas(ativas);
 
   const pp = Object.entries(r.porProcesso||{}).sort((a,b)=>b[1].media-a[1].media);
   const topo = pp.length ? Math.max(...pp.map(([,v])=>v.media)) : 1;
@@ -396,31 +468,156 @@ function kpi(v,rot,un,alerta){
   return `<div class="cx kpi${alerta?' alerta':''}"><b>${v}${un?`<small> ${un}</small>`:''}</b><span>${rot}</span></div>`;
 }
 
-function linha(r){
+/* ---------- ondas: anel em SVG que anima o progresso ---------- */
+const VOLTA = 2*Math.PI*18;
+const domOndas = new Map();
+
+function sincronizarOndas(ondas){
+  const cont = $('#ondas');
+  if (!ondas.length){
+    domOndas.clear();
+    cont.innerHTML = `<div class="cx onda"><div class="txt"><div class="t1">Sem ondas lidas</div>
+      <div class="t3">o favorito ainda não achou os cartões de onda na tela</div></div></div>`;
+    return;
+  }
+  if (cont.querySelector('.txt') && !domOndas.size) cont.innerHTML = '';
+  const vistos = new Set();
+  ondas.forEach((o,i)=>{
+    const k = String(o.onda); vistos.add(k);
+    let el = domOndas.get(k);
+    if (!el){
+      el = document.createElement('div');
+      el.className = 'cx onda entra';
+      el.style.animationDelay = (i*70)+'ms';
+      el.innerHTML = `<svg class="anel" viewBox="0 0 44 44" aria-hidden="true">
+          <circle class="tr" cx="22" cy="22" r="18"></circle>
+          <circle class="pr" cx="22" cy="22" r="18" stroke-dasharray="${VOLTA.toFixed(1)}" stroke-dashoffset="${VOLTA.toFixed(1)}"></circle>
+          <text x="22" y="26" text-anchor="middle"></text></svg>
+        <div class="txt"><div class="t1"></div><div class="t2"></div><div class="t3"></div></div>`;
+      cont.appendChild(el);
+      domOndas.set(k, el);
+    }
+    const tot = (o.pendentes||0)+(o.despachadas||0);
+    const p = tot ? Math.round((o.despachadas||0)/tot*100) : (o.pct||0);
+    const fim = o.pendentes===0;
+    const cor = fim ? 'var(--verde)' : p>=90 ? 'var(--azul)' : 'var(--ambar)';
+    el.classList.toggle('zerada', fim);
+    const arco = el.querySelector('.pr');
+    arco.style.stroke = cor;
+    arco.setAttribute('stroke-dashoffset', (VOLTA*(1-(fim?100:p)/100)).toFixed(1));
+    texto(el.querySelector('text'), fim ? '✓' : p+'%');
+    html(el.querySelector('.t1'), `Onda ${o.onda}${o.finalizou?`<small>fechou ${o.finalizou}</small>`:''}`);
+    html(el.querySelector('.t2'), fim ? 'Encerrada' : `${o.pendentes??'–'} <span>pendentes</span>`);
+    texto(el.querySelector('.t3'), `${o.despachadas??'–'}${fim?'':` de ${tot||'–'}`} despachadas`);
+  });
+  domOndas.forEach((el,k)=>{ if (!vistos.has(k)){ el.remove(); domOndas.delete(k); } });
+}
+
+/* ---------- rotas: atualização em lugar, com transição nas barras ---------- */
+const domRotas = new Map();
+
+function texto(el,v){ if (el && el.textContent !== String(v)) el.textContent = v; }
+function html(el,v){ if (el && el.innerHTML !== v) el.innerHTML = v; }
+function numero(el,v){
+  if (!el) return;
+  const novo = String(v);
+  if (el.textContent === novo) return;
+  const antes = el.textContent;
+  el.textContent = novo;
+  if (antes !== '') { el.classList.remove('sobe'); void el.offsetWidth; el.classList.add('sobe'); }
+}
+
+function sincronizarRotas(ativas){
+  const cont = $('#rotas');
+  if (!ativas.length){
+    domRotas.clear();
+    cont.innerHTML = vazio('Nenhuma rota em processo neste momento.');
+    return;
+  }
+  if (cont.querySelector('.vazio')) cont.innerHTML = '';
+  const vistos = new Set();
+  ativas.forEach((r,i)=>{
+    vistos.add(r.rota);
+    let el = domRotas.get(r.rota);
+    if (!el){
+      el = document.createElement('div');
+      el.className = 'rota entra';
+      el.style.animationDelay = Math.min(i*45,450)+'ms';
+      el.innerHTML = `<div class="ac"></div>
+        <div class="idr"><b></b><span class="sub"></span></div>
+        <span class="pill"><i></i><span class="nm"></span></span>
+        <div class="trilha"></div>
+        <div class="met mtp"><b></b><span>no processo</span></div>
+        <div class="met mtt"><b></b><span>total no ciclo</span></div>`;
+      cont.appendChild(el);
+      domRotas.set(r.rota, el);
+    }
+    el.style.order = i;
+    pintarRota(el, r);
+  });
+  domRotas.forEach((el,k)=>{
+    if (vistos.has(k)) return;
+    domRotas.delete(k);
+    el.classList.add('sai');
+    setTimeout(()=>el.remove(), 380);
+  });
+}
+
+function pintarRota(el,r){
   const tp = r.tpMin||0, tt = r.ttMin||0, at = proc(r.processo);
-  const cls = tt>=LIMITES.critico ? ' critica' : tt>=LIMITES.atencao ? ' atencao' : '';
-  const fases = (r.fases||[]).map(f=>({p:f.processo,m:f.min||0}));
+  el.classList.toggle('critica', tt>=LIMITES.critico);
+  el.classList.toggle('atencao', tt<LIMITES.critico && tt>=LIMITES.atencao);
+  el.querySelector('.ac').style.background = at.cor;
+
+  texto(el.querySelector('.idr b'), r.rota);
+  html(el.querySelector('.idr .sub'), `doca ${esc(r.doca||'–')}${r.onda!=null?` · onda ${r.onda}`:''}${
+    r.transportadora?`<br>${esc(r.transportadora)}`:''}${
+    r.auditoria&&r.auditoria.faltantes?`<br><span class="falt">${r.auditoria.faltantes} faltante${r.auditoria.faltantes>1?'s':''} na aduana</span>`:''}`);
+
+  el.querySelector('.pill i').style.background = at.cor;
+  texto(el.querySelector('.pill .nm'), r.processo||'–');
+
+  // trilha
+  const fases = (r.fases||[]).filter(f=>f.min!=null).map(f=>({p:f.processo,m:f.min||0}));
   fases.push({p:r.processo,m:tp,viva:true});
   const soma = fases.reduce((a,f)=>a+f.m,0)||1;
-  const trilha = fases.map(f=>{
-    const c = proc(f.p), pc = f.m/soma*100;
-    const rot = pc>=17 ? `${esc(curto(f.p))} ${min(f.m)}` : pc>=9 ? min(f.m) : '';
-    return `<div class="seg${f.viva?' viva':''}${c.claro?' claro':''}" style="width:${pc.toFixed(2)}%;background:${c.cor}"
-      title="${esc(f.p)} · ${min(f.m)} min">${rot}</div>`;
-  }).join('');
-  const aduanaLenta = /aduana/i.test(r.processo||'') && tp>=LIMITES.aduana;
-  return `<div class="rota${cls}">
-    <div class="ac" style="background:${at.cor}"></div>
-    <div class="idr"><b>${esc(r.rota)}</b><span>doca ${esc(r.doca||'–')}${r.onda!=null?` · onda ${r.onda}`:''}${
-      r.transportadora?`<br>${esc(r.transportadora)}`:''}</span></div>
-    <span class="pill"><i style="background:${at.cor}"></i><span>${esc(r.processo||'–')}</span></span>
-    <div class="trilha">${trilha}</div>
-    <div class="met${aduanaLenta?' quente':''}"><b>${min(tp)}</b><span>no processo</span></div>
-    <div class="met${tt>=LIMITES.critico?' fervendo':tt>=LIMITES.atencao?' quente':''}"><b>${min(tt)}</b><span>total no ciclo</span></div>
-  </div>`;
+  const tr = el.querySelector('.trilha');
+  if (tr.dataset.chave !== fases.map(f=>f.p).join('|')){
+    tr.dataset.chave = fases.map(f=>f.p).join('|');
+    tr.innerHTML = fases.map(f=>{
+      const c = proc(f.p);
+      return `<div class="seg${f.viva?' viva':''}${c.claro?' claro':''}" style="background:${c.cor};width:0"></div>`;
+    }).join('');
+  }
+  [...tr.children].forEach((seg,k)=>{
+    const f = fases[k]; if (!f) return;
+    const pc = f.m/soma*100;
+    seg.style.width = pc.toFixed(2)+'%';
+    seg.title = `${f.p} · ${min(f.m)} min`;
+    texto(seg, pc>=17 ? `${curto(f.p)} ${min(f.m)}` : pc>=9 ? min(f.m) : '');
+  });
+
+  const mtp = el.querySelector('.mtp'), mtt = el.querySelector('.mtt');
+  mtp.classList.toggle('quente', /aduana/i.test(r.processo||'') && tp>=LIMITES.aduana);
+  mtt.classList.toggle('fervendo', tt>=LIMITES.critico);
+  mtt.classList.toggle('quente', tt<LIMITES.critico && tt>=LIMITES.atencao);
+  numero(mtp.querySelector('b'), min(tp));
+  numero(mtt.querySelector('b'), min(tt));
 }
+
 function curto(p){
   return String(p||'').replace(/\s+em andamento/i,'').replace(/Carregando pacotes/i,'Carregando').replace(/Aguardando/i,'Aguard.');
+}
+
+/* sequência de processos como etiquetas separadas */
+function seqChips(x){
+  const fases = [...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}]
+    .filter(f=>f && f.min!=null && f.processo);
+  if (!fases.length) return '<span class="rot">–</span>';
+  return `<div class="seq">${fases.map(f=>{
+    const c = proc(f.processo);
+    return `<span class="p" style="--cor:${c.cor}">${esc(curto(f.processo))}<b>${min(f.min)}</b></span>`;
+  }).join('')}</div>`;
 }
 
 function vazio(msg){
@@ -440,7 +637,7 @@ async function pintarHist(){
   const topo = pp.length ? Math.max(...pp.map(([,v])=>v.media)) : 1;
   const porOnda = {};
   rotas.forEach(x=>{ const k = x.onda??'–'; (porOnda[k]=porOnda[k]||[]).push(x); });
-  const cruz = rotas.some(x=>x.transportadora || x.auditoria);
+  const cruz = rotas.some(x=>x.transportadora || x.auditoria || x.placa);
 
   $('#hist').innerHTML = `
     <div class="linha"><span class="rot">Dias gravados</span>
@@ -473,15 +670,14 @@ async function pintarHist(){
     </div>
     <div class="cx bloco">
       <h3>Rota a rota</h3>
-      <div class="in"><table class="tab"><thead><tr><th>Rota</th><th>Doca</th><th>Onda</th>${cruz?'<th>Transportadora</th><th>Aduana feita por</th><th>Faltantes</th>':''}<th>Entrou</th><th>Saiu</th><th>Total</th><th>Sequência de processos</th></tr></thead><tbody>
+      <div class="in"><table class="tab"><thead><tr><th>Rota</th><th>Doca</th><th>Onda</th>${cruz?'<th>Transportadora</th><th>Placa</th><th>Área</th><th>Aduana feita por</th><th>Faltantes</th>':''}<th>Entrou</th><th>Saiu</th><th>Total</th><th>Sequência de processos</th></tr></thead><tbody>
       ${rotas.sort((a,b)=>(b.totalMin||b.ttMin||0)-(a.totalMin||a.ttMin||0)).map(x=>`
         <tr><td class="n">${esc(x.rota)}</td><td>${esc(x.doca||'–')}</td><td>${x.onda??'–'}</td>
-        ${cruz?`<td>${esc(x.transportadora||'–')}</td><td>${esc((x.auditoria&&x.auditoria.rep)||'–')}</td><td>${faltantes(x)}</td>`:''}
+        ${cruz?`<td>${esc(x.transportadora||'–')}</td><td>${esc(x.placa||'–')}</td><td>${esc(x.area||'–')}</td><td>${esc((x.auditoria&&x.auditoria.rep)||'–')}</td><td>${faltantes(x)}</td>`:''}
         <td>${x.primeiroVisto?hhmm(x.primeiroVisto):'–'}</td>
         <td>${x.finalizada?hhmm(x.fim):'<span style="color:var(--azul)">em curso</span>'}</td>
         <td class="n">${min(x.totalMin??x.ttMin)}</td>
-        <td class="fluxo">${[...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}].filter(Boolean)
-          .map(f=>`${esc(curto(f.processo))} <b>${min(f.min)}</b>`).join(' → ')}</td></tr>`).join('')}
+        <td class="fluxo">${seqChips(x)}</td></tr>`).join('')}
       </tbody></table></div>
     </div>` : vazio()}`;
   $('#hist').querySelectorAll('[data-dia]').forEach(b=>b.onclick=()=>{
@@ -515,7 +711,7 @@ function mostrar(v){
   $('#btAnalise').classList.toggle('on', v==='analise');
   pintar();
 }
-$('#btVista').onclick = () => mostrar(estado.vista==='hist' ? 'vivo' : 'hist');
+$('#btVista').onclick = () => { const v = estado.vista==='hist' ? 'vivo' : 'hist'; estado.vista=v; if (v==='hist') carregar().then(()=>mostrar(v)); else mostrar(v); };
 $('#btAnalise').onclick = () => mostrar(estado.vista==='analise' ? 'vivo' : 'analise');
 $('#btCfg').onclick = () => {
   const dlg = document.createElement('div');
@@ -581,9 +777,27 @@ function desenharAnalise(){
   }
 
   // coleta de fases e totais
-  const fases = [], totais = [], porDia = {}, porCiclo = {}, rotasTop = [];
+  const fases = [], totais = [], porDia = {}, porCiclo = {}, rotasTop = [], porTr = {}, porRep = {}, porArea = {};
   docs.forEach(d=>{
     Object.values(d.rotas||{}).forEach(x=>{
+      if (x.transportadora){
+        const o = porTr[x.transportadora] = porTr[x.transportadora] || {tot:[], adu:[], falt:0, rotas:0};
+        o.rotas++;
+        const tt = x.totalMin ?? x.ttMin; if (tt!=null) o.tot.push(tt);
+        if (x.auditoria){ if (x.auditoria.min!=null) o.adu.push(x.auditoria.min); o.falt += x.auditoria.faltantes||0; }
+      }
+      if (x.area){
+        const ar = porArea[x.area] = porArea[x.area] || {tot:[], rotas:0, spr:[]};
+        ar.rotas++;
+        const tt2 = x.totalMin ?? x.ttMin; if (tt2!=null) ar.tot.push(tt2);
+        if (x.spr!=null) ar.spr.push(x.spr);
+      }
+      if (x.auditoria && x.auditoria.rep){
+        const r2 = porRep[x.auditoria.rep] = porRep[x.auditoria.rep] || {n:0, min:[], falt:0, un:0, av:0, ids:[]};
+        r2.n++; if (x.auditoria.min!=null) r2.min.push(x.auditoria.min);
+        r2.falt += x.auditoria.faltantes||0; r2.un += x.auditoria.unidades||0; r2.av += x.auditoria.avariadas||0;
+        (x.auditoria.faltantesIds||[]).forEach(i=>r2.ids.push({id:i, rota:x.rota, dia:d.data, ciclo:d.ciclo}));
+      }
       const tot = x.totalMin ?? x.ttMin;
       const seq = [...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}].filter(Boolean);
       seq.forEach(f=>{ if (f.min!=null && !/antes da grava/i.test(f.processo||'')) fases.push({p:f.processo, m:f.min, dia:d.data, ciclo:d.ciclo, rota:x.rota}); });
@@ -591,8 +805,7 @@ function desenharAnalise(){
         totais.push(tot);
         (porDia[d.data] = porDia[d.data]||[]).push(tot);
         (porCiclo[d.ciclo] = porCiclo[d.ciclo]||[]).push(tot);
-        rotasTop.push({rota:x.rota, dia:d.data, ciclo:d.ciclo, tot, onda:x.onda, doca:x.doca,
-          seq: seq.map(f=>`${curto(f.processo)} ${min(f.min)}`).join(' → ')});
+        rotasTop.push({rota:x.rota, dia:d.data, ciclo:d.ciclo, tot, onda:x.onda, doca:x.doca, seq: seqChips(x)});
       }
     });
   });
@@ -655,13 +868,46 @@ function desenharAnalise(){
       </tbody></table></div>
     </div>
 
+    ${Object.keys(porArea).length?`
+    <div class="cx bloco" style="margin-bottom:12px">
+      <h3>Por tipo de área</h3>
+      <div class="in"><table class="tab"><thead><tr><th>Área</th><th>Rotas</th><th>Média total</th><th>p90</th><th>SPR médio</th></tr></thead><tbody>
+      ${Object.entries(porArea).sort((a,b)=>(media(b[1].tot)||0)-(media(a[1].tot)||0)).map(([n,o])=>`
+        <tr><td>${esc(n)}</td><td class="n">${o.rotas}</td><td class="n">${min(media(o.tot))}</td>
+        <td class="n">${min(pct(o.tot,90))}</td><td class="n">${o.spr.length?Math.round(media(o.spr)):'–'}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>`:''}
+
+    ${Object.keys(porTr).length?`
+    <div class="cx bloco" style="margin-bottom:12px">
+      <h3>Por transportadora</h3>
+      <div class="in"><table class="tab"><thead><tr><th>Transportadora</th><th>Rotas</th><th>Média total</th><th>p90</th><th>Média de aduana</th><th>Faltantes</th></tr></thead><tbody>
+      ${Object.entries(porTr).sort((a,b)=>(media(b[1].tot)||0)-(media(a[1].tot)||0)).map(([n,o])=>`
+        <tr><td>${esc(n)}</td><td class="n">${o.rotas}</td><td class="n">${min(media(o.tot))}</td>
+        <td class="n">${min(pct(o.tot,90))}</td><td class="n">${min(media(o.adu))}</td>
+        <td class="n" style="color:${o.falt?'var(--vermelho)':'inherit'}">${o.falt}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>`:''}
+
+    ${Object.keys(porRep).length?`
+    <div class="cx bloco" style="margin-bottom:12px">
+      <h3>Aduana por rep</h3>
+      <div class="in"><table class="tab"><thead><tr><th>Rep</th><th>Auditorias</th><th>Tempo médio</th><th>p90</th><th>Unidades</th><th>Faltantes</th><th>Avariadas</th><th>IDs faltantes</th></tr></thead><tbody>
+      ${Object.entries(porRep).sort((a,b)=>b[1].n-a[1].n).map(([n,o])=>`
+        <tr><td>${esc(n)}</td><td class="n">${o.n}</td><td class="n">${min(media(o.min))}</td><td class="n">${min(pct(o.min,90))}</td>
+        <td class="n">${o.un}</td><td class="n" style="color:${o.falt?'var(--vermelho)':'inherit'}">${o.falt}</td><td class="n">${o.av}</td>
+        <td>${o.ids.length?`<details><summary style="cursor:pointer;color:var(--azul)">ver ${o.ids.length}</summary>
+          <span class="rot" style="font-size:11.5px">${o.ids.map(i=>`${esc(i.id)} (${esc(i.rota)})`).join(', ')}</span></details>`:'–'}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>`:''}
+
     <div class="cx bloco">
       <h3>As 15 rotas mais lentas da janela</h3>
       <div class="in"><table class="tab"><thead><tr><th>Rota</th><th>Dia</th><th>Ciclo</th><th>Onda</th><th>Doca</th><th>Total</th><th>Sequência</th></tr></thead><tbody>
       ${rotasTop.sort((a,b)=>b.tot-a.tot).slice(0,15).map(r=>`<tr><td class="n">${esc(r.rota)}</td>
         <td>${r.dia.split('-').reverse().slice(0,2).join('/')}</td><td>${esc(r.ciclo)}</td><td>${r.onda??'–'}</td><td>${esc(r.doca||'–')}</td>
         <td class="n" style="color:${r.tot>=LIMITES.critico?'var(--vermelho)':'inherit'}">${min(r.tot)}</td>
-        <td class="fluxo">${esc(r.seq)}</td></tr>`).join('')}
+        <td class="fluxo">${r.seq}</td></tr>`).join('')}
       </tbody></table></div>
     </div>`;
   ligarAnalise(fases);
@@ -684,11 +930,13 @@ function ligarAnalise(fases){
   $('#analise').querySelectorAll('[data-cic]').forEach(b=>b.onclick=()=>{ an.ciclo=b.dataset.cic; desenharAnalise(); });
   const bc = $('#btCsvAn');
   if (bc) bc.onclick = () => {
-    const l = [['dia','ciclo','rota','onda','doca','processo','minutos'].join(';')];
+    const l = [['dia','ciclo','rota','onda','doca','transportadora','placa','area','spr','aduana_rep','aduana_min','faltantes','processo','minutos'].join(';')];
     (an.docs||[]).filter(d=>an.ciclo==='todos'||d.ciclo===an.ciclo).forEach(d=>{
       Object.values(d.rotas||{}).forEach(x=>{
         [...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}].filter(Boolean)
-          .forEach(f=>l.push([d.data,d.ciclo,x.rota,x.onda??'',x.doca||'',f.processo,f.min??''].join(';')));
+          .forEach(f=>l.push([d.data,d.ciclo,x.rota,x.onda??'',x.doca||'',x.transportadora||'',x.placa||'',x.area||'',x.spr??'',
+            (x.auditoria&&x.auditoria.rep)||'', (x.auditoria&&x.auditoria.min)??'', (x.auditoria&&x.auditoria.faltantes)??'',
+            f.processo,f.min??''].join(';')));
       });
     });
     const a = document.createElement('a');
@@ -710,14 +958,16 @@ function dadosDemo(dia){
     rotas:{}, eventos:[] };
   [R('VV12_PM1','93',1,'Aduana em andamento',17,17,[]),
    R('VV19_PM1','64',1,'Aduana em andamento',14,33,[{processo:'Carregando pacotes',min:19}]),
-   R('M13_PM1','62',2,'Carregando pacotes',6,40,[{processo:'Aguardando doca',min:34}]),
+   Object.assign(R('M13_PM1','62',2,'Carregando pacotes',6,40,[{processo:'Aguardando doca',min:34}]),
+     {transportadora:'A L C TRANSPORTES', placa:'TZG9I86', area:'Distante', spr:90, auditoria:{rep:'Marlon Ferreira Barbosa',status:'finished',min:12,unidades:132,corretas:132,faltantes:0,avariadas:0,aMais:0,faltantesIds:[]}}),
    R('SB04_PM1','71',2,'Aduana em andamento',24,52,[{processo:'Carregando pacotes',min:28}]),
    R('CT07_PM1','58',3,'Carregando pacotes',9,9,[]),
    R('BH31_PM1','44',3,'Aduana em andamento',11,26,[{processo:'Carregando pacotes',min:15}]),
    R('VV02_PM1','90',1,'Carregando pacotes',31,31,[]),
    R('GV22_PM1','67',4,'Aguardando doca',13,13,[]),
    R('M08_PM1','61',1,'Carregando pacotes',22,38,[{processo:'Aguardando doca',min:16}],true),
-   R('VV05_PM1','92',2,'Aduana em andamento',12,29,[{processo:'Carregando pacotes',min:17}],true),
+   Object.assign(R('VV05_PM1','92',2,'Aduana em andamento',12,29,[{processo:'Carregando pacotes',min:17}],true),
+     {transportadora:'DECARGO', placa:'SDDARA7D88', area:'Risco - Comercial', spr:112, auditoria:{rep:'Marlon Ferreira Barbosa',status:'finished',min:19,unidades:88,corretas:86,faltantes:2,avariadas:0,aMais:0,faltantesIds:['47952046030','47952929630']}}),
    R('CT01_PM1','55',2,'Carregando pacotes',18,18,[],true)
   ].forEach(x=>doc.rotas[x.rota]=x);
   const pp = {};
