@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="claro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Monitor de processos Expedição · SMG1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --amarelo:#FFE600; --azul:#3483FA; --verde:#00A650; --ambar:#FFB800;
+  --laranja:#FF7733; --vermelho:#F23D4F; --roxo:#8B5CF6;
+  --raio:12px; --sombra:0 1px 2px rgba(0,0,0,.06),0 6px 20px rgba(16,29,54,.06);
+}
+html[data-tema=claro]{
+  --fundo:#EEF1F5; --superf:#FFFFFF; --superf2:#F7F9FB; --borda:#E3E7EC;
+  --tinta:#14181F; --mudo:#6C7681; --trilho:#EDF0F4; --barra:#FFE600; --barratinta:#14181F;
+}
+html[data-tema=escuro]{
+  --fundo:#081428; --superf:#0E2141; --superf2:#132A4F; --borda:rgba(255,255,255,.10);
+  --tinta:#EAF0FA; --mudo:#93A4BF; --trilho:rgba(255,255,255,.08); --barra:#0B1B33; --barratinta:#FFE600;
+  --sombra:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.28);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--fundo); color:var(--tinta);
+  font:15px/1.5 Inter,system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased; overflow:hidden;
+}
+.num,b,.big{font-variant-numeric:tabular-nums}
+
+/* ---------- barra superior ---------- */
+.barra{background:var(--barra);color:var(--barratinta);display:flex;align-items:center;gap:16px;padding:0 20px;height:56px;
+  border-bottom:1px solid rgba(0,0,0,.06)}
+.logo{display:flex;align-items:center;gap:11px;min-width:0}
+.logo .pt{width:9px;height:9px;border-radius:50%;background:#7c8494;flex:none}
+.logo .pt.on{background:var(--verde);box-shadow:0 0 0 4px rgba(0,166,80,.22)}
+html[data-tema=escuro] .logo .pt.on{box-shadow:0 0 0 4px rgba(0,166,80,.28)}
+.logo h1{margin:0;font:600 18px/1.1 'Space Grotesk',sans-serif;letter-spacing:-.35px;white-space:nowrap}
+.logo em{font-style:normal;font-size:12.5px;opacity:.68;white-space:nowrap}
+.barra .esp{flex:1}
+.ctr{display:flex;align-items:center;gap:8px}
+.bt{font:600 13px Inter;cursor:pointer;border-radius:9px;padding:7px 12px;
+  border:1px solid rgba(0,0,0,.12);background:rgba(255,255,255,.55);color:inherit}
+html[data-tema=escuro] .bt{border-color:var(--borda);background:rgba(255,255,255,.06)}
+.bt:hover{background:rgba(255,255,255,.85)}
+html[data-tema=escuro] .bt:hover{background:rgba(255,255,255,.12)}
+.bt.on{background:var(--tinta);color:var(--barra);border-color:transparent}
+html[data-tema=escuro] .bt.on{background:var(--amarelo);color:#14181F}
+.campo{font:500 13px Inter;border-radius:9px;padding:6px 10px;border:1px solid rgba(0,0,0,.12);
+  background:rgba(255,255,255,.55);color:inherit}
+html[data-tema=escuro] .campo{border-color:var(--borda);background:rgba(255,255,255,.06);color-scheme:dark}
+.hora{font:600 16px/1 'Space Grotesk';letter-spacing:-.3px;min-width:48px;text-align:right}
+
+/* ---------- abas de ciclo ---------- */
+.ciclos{display:flex;gap:8px;align-items:center;padding:10px 20px;background:var(--superf);
+  border-bottom:1px solid var(--borda);overflow-x:auto;scrollbar-width:none}
+.ciclos::-webkit-scrollbar{display:none}
+.ciclo{border:1px solid var(--borda);background:var(--superf2);color:var(--tinta);cursor:pointer;border-radius:10px;
+  padding:6px 12px;display:flex;align-items:center;gap:9px;white-space:nowrap;transition:border-color .15s,background .15s}
+.ciclo strong{font:600 14px/1.2 'Space Grotesk';letter-spacing:-.2px}
+.ciclo span{font:500 11.5px/1.2 Inter;color:var(--mudo)}
+.ciclo:hover{border-color:#C9D1DA}
+.ciclo[aria-current=true]{background:var(--amarelo);border-color:#E8D200;box-shadow:inset 0 0 0 1px rgba(0,0,0,.04)}
+.ciclo[aria-current=true] strong,.ciclo[aria-current=true] span{color:#14181F}
+.ciclo[aria-current=true] span{opacity:.7}
+
+/* ---------- estrutura ---------- */
+.app{height:100%;display:flex;flex-direction:column}
+.corpo{flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 20px 8px;gap:12px}
+.ondas{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(176px,1fr);gap:12px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.ondas::-webkit-scrollbar{display:none}
+.cx{background:var(--superf);border:1px solid var(--borda);border-radius:var(--raio);box-shadow:var(--sombra)}
+
+.onda{display:flex;align-items:center;gap:12px;padding:11px 13px}
+.anel{--p:0;width:46px;height:46px;flex:none;border-radius:50%;display:grid;place-items:center;
+  background:conic-gradient(var(--cor,var(--azul)) calc(var(--p)*1%),var(--trilho) 0)}
+.anel i{width:34px;height:34px;border-radius:50%;background:var(--superf);display:grid;place-items:center;
+  font:600 12px 'Space Grotesk';font-style:normal;letter-spacing:-.3px}
+.onda .txt{min-width:0}
+.onda .t1{font:600 13px/1.2 Inter;display:flex;align-items:center;gap:6px}
+.onda .t1 small{font:500 11.5px Inter;color:var(--mudo)}
+.onda .t2{margin-top:3px;font:600 20px/1.1 'Space Grotesk';letter-spacing:-.6px}
+.onda .t2 span{font:500 12px Inter;color:var(--mudo);letter-spacing:0}
+.onda .t3{margin-top:2px;font:500 11.5px Inter;color:var(--mudo)}
+.onda.zerada .t2{color:var(--verde)}
+
+.grade{flex:1;min-height:0;display:grid;grid-template-columns:1fr 300px;gap:12px}
+.quadro{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.cab{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--borda)}
+.cab h2{margin:0;font:600 14px/1 Inter;letter-spacing:-.1px}
+.cab .sub{font:500 12px Inter;color:var(--mudo);margin-left:auto}
+.rolo{overflow:auto;padding:8px}
+.rolo::-webkit-scrollbar{width:10px}
+.rolo::-webkit-scrollbar-thumb{background:#CBD3DC;border-radius:8px}
+html[data-tema=escuro] .rolo::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16)}
+
+/* ---------- linha de rota ---------- */
+.rota{display:grid;grid-template-columns:8px 138px 186px 1fr 78px 82px;align-items:center;gap:13px;
+  background:var(--superf2);border:1px solid var(--borda);border-radius:11px;padding:10px 14px 10px 0;margin-bottom:7px}
+.rota .ac{width:8px;height:100%;min-height:44px;border-radius:11px 0 0 11px;background:var(--azul)}
+.rota.atencao{border-color:#F3D89B}
+.rota.critica{border-color:#FFC2C9;background:#FFF5F6}
+html[data-tema=escuro] .rota.atencao{border-color:rgba(255,184,0,.30)}
+html[data-tema=escuro] .rota.critica{background:rgba(242,61,79,.12);border-color:rgba(242,61,79,.35)}
+.idr b{display:block;font:600 16px/1.15 'Space Grotesk';letter-spacing:-.35px}
+.idr span{font:500 11.5px Inter;color:var(--mudo)}
+.pill{display:inline-flex;align-items:center;gap:8px;max-width:100%;font:500 13px Inter;
+  border:1px solid var(--borda);background:var(--superf);border-radius:999px;padding:6px 12px}
+.pill i{width:8px;height:8px;border-radius:50%;flex:none}
+.pill span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trilha{display:flex;height:28px;border-radius:8px;overflow:hidden;background:var(--trilho)}
+.seg{height:100%;min-width:3px;display:flex;align-items:center;padding:0 8px;gap:6px;overflow:hidden;
+  font:600 11.5px Inter;color:#14181F;white-space:nowrap}
+.seg.claro{color:#fff}
+.seg.viva{background-image:repeating-linear-gradient(115deg,rgba(255,255,255,.28) 0 7px,transparent 7px 15px);
+  animation:desliza 1.1s linear infinite}
+@keyframes desliza{to{background-position:15px 0}}
+@media (prefers-reduced-motion:reduce){.seg.viva{animation:none}}
+.met{text-align:right}
+.met b{display:block;font:600 17px/1.05 'Space Grotesk';letter-spacing:-.5px}
+.met span{font:500 10.5px Inter;color:var(--mudo)}
+.met.quente b{color:#C97B00}
+.met.fervendo b{color:var(--vermelho)}
+html[data-tema=escuro] .met.quente b{color:var(--ambar)}
+
+/* ---------- coluna lateral ---------- */
+aside{min-height:0;display:flex;flex-direction:column;gap:12px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.kpi{padding:12px 14px}
+.kpi b{display:block;font:600 24px/1.1 'Space Grotesk';letter-spacing:-.8px}
+.kpi b small{font:500 12px Inter;color:var(--mudo);letter-spacing:0}
+.kpi span{font:500 11.5px Inter;color:var(--mudo)}
+.kpi.alerta{border-color:#FFC2C9;background:#FFF5F6}
+.kpi.alerta b{color:var(--vermelho)}
+html[data-tema=escuro] .kpi.alerta{background:rgba(242,61,79,.12);border-color:rgba(242,61,79,.32)}
+.cx.bloco{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.cx.bloco h3{margin:0;padding:12px 14px 10px;font:600 13px/1 Inter}
+.cx.bloco .in{padding:0 14px 14px;overflow:auto}
+.pp{display:flex;flex-direction:column;gap:11px}
+.pp .l{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font:500 12.5px Inter}
+.pp .l em{font-style:normal;color:var(--mudo);font-size:11.5px}
+.pp .l b{font:600 13px 'Space Grotesk'}
+.pp .t{height:8px;border-radius:5px;background:var(--trilho);overflow:hidden;margin-top:5px}
+.pp .t i{display:block;height:100%;border-radius:5px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:600 12px 'Space Grotesk';border:1px solid var(--borda);background:var(--superf2);border-radius:8px;padding:5px 9px}
+.chip small{font:500 10.5px Inter;color:var(--mudo);margin-left:6px}
+.chip.ok{border-color:#B8E6CC;background:#F1FBF5}
+html[data-tema=escuro] .chip.ok{background:rgba(0,166,80,.14);border-color:rgba(0,166,80,.32)}
+
+/* ---------- histórico ---------- */
+.hist{flex:1;min-height:0;overflow:auto;padding:14px 20px 8px}
+.hist .pp{max-width:760px}
+.hist .linha{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.hist .linha .rot{font:500 12.5px Inter;color:var(--mudo)}
+.hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:12px}
+.tab{width:100%;border-collapse:separate;border-spacing:0;font:500 13px Inter}
+.tab th{text-align:left;font:600 11.5px Inter;color:var(--mudo);padding:9px 12px;position:sticky;top:0;
+  background:var(--superf);border-bottom:1px solid var(--borda)}
+.tab td{padding:10px 12px;border-bottom:1px solid var(--borda);white-space:nowrap}
+.tab tr:last-child td{border-bottom:0}
+.tab td.n{font-family:'Space Grotesk';font-weight:600}
+.fluxo{white-space:normal;color:var(--mudo);font-size:12px}
+.fluxo b{color:var(--tinta);font-weight:600}
+.vazio{padding:46px 16px;text-align:center;color:var(--mudo);font-size:13.5px}
+.vazio b{display:block;font:600 17px 'Space Grotesk';color:var(--tinta);margin-bottom:7px}
+.oculto{display:none!important}
+
+/* ---------- assinatura ---------- */
+.assina{padding:6px 22px 9px;text-align:right;font:500 10.5px/1 Inter;letter-spacing:.35px;color:var(--mudo);opacity:.62}
+
+/* ---------- dialogo ---------- */
+.dlg{position:fixed;inset:0;z-index:40;background:rgba(10,20,36,.5);display:grid;place-items:center;padding:20px}
+.dlg .box{width:min(470px,100%);background:var(--superf);border:1px solid var(--borda);border-radius:16px;padding:20px;box-shadow:0 24px 60px rgba(0,0,0,.25)}
+.dlg h3{margin:0 0 6px;font:600 17px 'Space Grotesk'}
+.dlg p{margin:0 0 14px;color:var(--mudo);font-size:13px}
+.dlg input{width:100%;border:1px solid var(--borda);background:var(--superf2);color:var(--tinta);border-radius:10px;padding:10px 12px;font:500 13px Inter}
+.dlg .acoes{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.bt.pri{background:var(--azul);border-color:var(--azul);color:#fff}
+
+@media(max-width:1200px){.grade{grid-template-columns:1fr}aside{flex-direction:row;flex-wrap:wrap}.kpis{flex:1}.cx.bloco{flex:1;min-width:260px}}
+@media(max-width:860px){body{overflow:auto}html,body{height:auto}.rota{grid-template-columns:6px 1fr 1fr;padding-right:12px}.trilha{grid-column:2/4}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="barra">
+    <div class="logo"><span class="pt" id="selo"></span>
+      <h1>Monitor de processos</h1><em>Expedição · SMG1</em></div>
+    <span class="esp"></span>
+    <div class="ctr">
+      <input type="date" class="campo" id="data">
+      <button class="bt" id="btVista">Histórico</button>
+      <button class="bt" id="btTema" title="Alternar tema">Modo escuro</button>
+      <button class="bt" id="btCfg" title="Origem dos dados">Dados</button>
+      <span class="hora" id="hora">--:--</span>
+    </div>
+  </div>
+
+  <div class="ciclos" id="ciclos"></div>
+
+  <!-- AO VIVO -->
+  <div class="corpo" id="vivo">
+    <div class="ondas" id="ondas"></div>
+    <div class="grade">
+      <div class="cx quadro">
+        <div class="cab"><h2>Rotas em processo</h2><span class="sub" id="sub"></span></div>
+        <div class="rolo" id="rotas"></div>
+      </div>
+      <aside>
+        <div class="kpis" id="kpis"></div>
+        <div class="cx bloco" style="flex:1">
+          <h3>Tempo médio por processo</h3>
+          <div class="in"><div class="pp" id="porProc"></div></div>
+        </div>
+        <div class="cx bloco">
+          <h3 id="tFin">Despachadas</h3>
+          <div class="in"><div class="chips" id="finalizadas"></div></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- HISTÓRICO -->
+  <div class="hist oculto" id="hist"></div>
+
+  <div class="assina">Criado por Ericlis TL SMG1</div>
+</div>
+
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const par = new URLSearchParams(location.search);
+const K_CFG = 'mlOndas:cfg', K_BASE = 'mlOndas:v1:', K_TEMA = 'mlOndas:tema';
+
+const FB_PADRAO = 'https://expedicaoprojeto1-default-rtdb.firebaseio.com';
+const cfg = Object.assign({firebase:FB_PADRAO, operador:''}, JSON.parse(localStorage.getItem(K_CFG)||'{}'));
+if (!cfg.firebase) cfg.firebase = FB_PADRAO;
+if (par.get('fb')) cfg.firebase = par.get('fb');
+const demo = par.get('demo') === '1';
+const LIMITES = { atencao: 30, critico: 45, aduana: 20 };   // minutos
+const estado = { data: par.get('data')||hojeISO(), ciclo: par.get('ciclo')||null, doc:null, ciclos:{}, vista:'vivo', ok:false, erro:'' };
+
+/* tema */
+(function(){
+  const t = localStorage.getItem(K_TEMA) || par.get('tema') || 'claro';
+  document.documentElement.dataset.tema = t;
+})();
+$('#btTema').onclick = () => {
+  const t = document.documentElement.dataset.tema === 'claro' ? 'escuro' : 'claro';
+  document.documentElement.dataset.tema = t;
+  localStorage.setItem(K_TEMA, t);
+  rotuloTema(); pintar();
+};
+function rotuloTema(){ $('#btTema').textContent = document.documentElement.dataset.tema === 'claro' ? 'Modo escuro' : 'Modo claro'; }
+rotuloTema();
+
+function hojeISO(d=new Date()){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function hhmm(ts){ const d=new Date(ts); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+function min(v){ if(v==null) return '–'; return v>=60 ? Math.floor(v/60)+'h'+String(Math.round(v%60)).padStart(2,'0') : String(Math.round(v*10)/10); }
+function esc(s){ return String(s??'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+
+const PROCS = [
+  [/aduana/i,            '#FFB800', false],
+  [/carreg|cargando|load/i,'#3483FA', true ],
+  [/aguard|espera|pendi|pausa|fila/i,'#96A2B0', true],
+  [/finaliz|despach|conclu|salida|sa[ií]da/i,'#00A650', true],
+  [/separ|sorting|bipag/i,'#8B5CF6', true],
+  [/atras|falha|erro|bloque|cancel/i,'#F23D4F', true]
+];
+function proc(p){
+  for (const [re,cor,claro] of PROCS) if (re.test(p||'')) return {cor, claro};
+  return {cor:'#FF7733', claro:true};
+}
+
+/* ---------- dados ---------- */
+async function buscarDia(data){
+  if (cfg.firebase){
+    const r = await fetch(cfg.firebase.replace(/\/+$/,'')+'/monitor-ondas/'+data+'.json',{cache:'no-store'});
+    if (!r.ok) throw new Error('o Firebase respondeu '+r.status);
+    return (await r.json())||{};
+  }
+  const out = {};
+  for (let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if (k.startsWith(K_BASE+data+':')){ try{ const d=JSON.parse(localStorage.getItem(k)); out[d.ciclo]=d; }catch(e){} }
+  }
+  return out;
+}
+async function diasGravados(){
+  if (cfg.firebase){
+    try{
+      const r = await fetch(cfg.firebase.replace(/\/+$/,'')+'/monitor-ondas.json?shallow=true',{cache:'no-store'});
+      if (!r.ok) return [];
+      return Object.keys((await r.json())||{}).sort().reverse();
+    }catch(e){ return []; }
+  }
+  const s = new Set();
+  for (let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if (k.startsWith(K_BASE)) s.add(k.slice(K_BASE.length).split(':')[0]); }
+  return [...s].sort().reverse();
+}
+
+async function carregar(){
+  try{ estado.ciclos = demo ? dadosDemo() : await buscarDia(estado.data); estado.ok = true; estado.erro=''; }
+  catch(e){ estado.ciclos = {}; estado.ok = false; estado.erro = e.message; }
+  const nomes = Object.keys(estado.ciclos);
+  if (!estado.ciclo || !estado.ciclos[estado.ciclo])
+    estado.ciclo = nomes.sort((a,b)=>(estado.ciclos[b].atualizadoEm||0)-(estado.ciclos[a].atualizadoEm||0))[0] || null;
+  estado.doc = estado.ciclo ? estado.ciclos[estado.ciclo] : null;
+  pintar();
+}
+
+function pintar(){
+  $('#hora').textContent = hhmm(Date.now());
+  const vivo = estado.doc && (Date.now()-(estado.doc.atualizadoEm||0) < 4*60000);
+  $('#selo').className = 'pt'+(vivo?' on':'');
+  const nomes = Object.keys(estado.ciclos).sort();
+  $('#ciclos').innerHTML = nomes.length ? nomes.map(n=>{
+    const r = estado.ciclos[n].resumo||{};
+    return `<button class="ciclo" data-c="${n}" aria-current="${n===estado.ciclo}">
+      <strong>${esc(n)}</strong><span>${r.emProcesso??0} em curso · ${r.finalizadas??0} ok</span></button>`;
+  }).join('') : `<span style="font:500 13px Inter;color:var(--mudo)">Nenhum ciclo gravado em ${estado.data.split('-').reverse().join('/')}</span>`;
+  $('#ciclos').querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{
+    estado.ciclo=b.dataset.c; estado.doc=estado.ciclos[estado.ciclo]; pintar();
+  });
+  if (estado.vista==='vivo') pintarVivo(); else pintarHist();
+}
+
+/* ---------- ao vivo ---------- */
+function pintarVivo(){
+  const d = estado.doc;
+  if (!d){
+    $('#ondas').innerHTML=''; $('#kpis').innerHTML=''; $('#porProc').innerHTML='';
+    $('#finalizadas').innerHTML=''; $('#sub').textContent=''; $('#rotas').innerHTML = vazio(); return;
+  }
+  const rotas = Object.values(d.rotas||{});
+  const ativas = rotas.filter(r=>!r.finalizada).sort((a,b)=>(b.ttMin||0)-(a.ttMin||0));
+  const fins = rotas.filter(r=>r.finalizada).sort((a,b)=>(b.fim||0)-(a.fim||0));
+  const r = d.resumo||{};
+
+  $('#ondas').innerHTML = (d.ondas||[]).map(o=>{
+    const tot = (o.pendentes||0)+(o.despachadas||0);
+    const p = tot ? Math.round((o.despachadas||0)/tot*100) : (o.pct||0);
+    const cor = o.pendentes===0 ? 'var(--verde)' : p>=90 ? 'var(--azul)' : 'var(--ambar)';
+    return `<div class="cx onda${o.pendentes===0?' zerada':''}">
+      <div class="anel" style="--p:${p};--cor:${cor}"><i>${p}%</i></div>
+      <div class="txt">
+        <div class="t1">Onda ${o.onda}${o.finalizou?`<small>fechou ${o.finalizou}</small>`:''}</div>
+        <div class="t2">${o.pendentes??'–'} <span>pendentes</span></div>
+        <div class="t3">${o.despachadas??'–'} de ${tot||'–'} despachadas</div>
+      </div></div>`;
+  }).join('') || `<div class="cx onda"><div class="txt"><div class="t1">Sem ondas lidas</div>
+      <div class="t2"><span>o favorito ainda não achou os cartões de onda na tela</span></div></div></div>`;
+
+  const fora = ativas.filter(x=>(x.ttMin||0)>=LIMITES.critico || (/aduana/i.test(x.processo||'') && (x.tpMin||0)>=LIMITES.aduana)).length;
+  $('#kpis').innerHTML =
+    kpi(r.emProcesso??ativas.length,'rotas em processo')+
+    kpi(r.finalizadas??fins.length,'já despachadas')+
+    kpi(min(r.mediaTotalMin),'tempo médio total','min')+
+    kpi(fora,'fora do limite','',fora>0);
+
+  $('#sub').textContent = `${ativas.length} rotas · maior tempo primeiro`;
+  $('#rotas').innerHTML = ativas.length ? ativas.map(linha).join('') : vazio('Nenhuma rota em processo neste momento.');
+
+  const pp = Object.entries(r.porProcesso||{}).sort((a,b)=>b[1].media-a[1].media);
+  const topo = pp.length ? Math.max(...pp.map(([,v])=>v.media)) : 1;
+  $('#porProc').innerHTML = pp.length ? pp.map(([p,v])=>`
+    <div><div class="l"><span>${esc(p)} <em>${v.n}x · pico ${min(v.max)}</em></span><b>${min(v.media)}</b></div>
+    <div class="t"><i style="width:${Math.max(4,Math.round(v.media/topo*100))}%;background:${proc(p).cor}"></i></div></div>`).join('')
+    : `<span style="font:500 12.5px Inter;color:var(--mudo)">As médias aparecem quando a primeira rota trocar de processo.</span>`;
+
+  $('#tFin').textContent = 'Despachadas' + (fins.length?` · ${fins.length}`:'');
+  $('#finalizadas').innerHTML = fins.length
+    ? fins.slice(0,80).map(x=>`<span class="chip ok">${esc(x.rota)}<small>${min(x.totalMin)} min</small></span>`).join('')
+    : `<span style="font:500 12.5px Inter;color:var(--mudo)">Nada despachado ainda neste ciclo.</span>`;
+}
+
+function kpi(v,rot,un,alerta){
+  return `<div class="cx kpi${alerta?' alerta':''}"><b>${v}${un?`<small> ${un}</small>`:''}</b><span>${rot}</span></div>`;
+}
+
+function linha(r){
+  const tp = r.tpMin||0, tt = r.ttMin||0, at = proc(r.processo);
+  const cls = tt>=LIMITES.critico ? ' critica' : tt>=LIMITES.atencao ? ' atencao' : '';
+  const fases = (r.fases||[]).map(f=>({p:f.processo,m:f.min||0}));
+  fases.push({p:r.processo,m:tp,viva:true});
+  const soma = fases.reduce((a,f)=>a+f.m,0)||1;
+  const trilha = fases.map(f=>{
+    const c = proc(f.p), pc = f.m/soma*100;
+    const rot = pc>=17 ? `${esc(curto(f.p))} ${min(f.m)}` : pc>=9 ? min(f.m) : '';
+    return `<div class="seg${f.viva?' viva':''}${c.claro?' claro':''}" style="width:${pc.toFixed(2)}%;background:${c.cor}"
+      title="${esc(f.p)} · ${min(f.m)} min">${rot}</div>`;
+  }).join('');
+  const aduanaLenta = /aduana/i.test(r.processo||'') && tp>=LIMITES.aduana;
+  return `<div class="rota${cls}">
+    <div class="ac" style="background:${at.cor}"></div>
+    <div class="idr"><b>${esc(r.rota)}</b><span>doca ${esc(r.doca||'–')}${r.onda!=null?` · onda ${r.onda}`:''}</span></div>
+    <span class="pill"><i style="background:${at.cor}"></i><span>${esc(r.processo||'–')}</span></span>
+    <div class="trilha">${trilha}</div>
+    <div class="met${aduanaLenta?' quente':''}"><b>${min(tp)}</b><span>no processo</span></div>
+    <div class="met${tt>=LIMITES.critico?' fervendo':tt>=LIMITES.atencao?' quente':''}"><b>${min(tt)}</b><span>total no ciclo</span></div>
+  </div>`;
+}
+function curto(p){
+  return String(p||'').replace(/\s+em andamento/i,'').replace(/Carregando pacotes/i,'Carregando').replace(/Aguardando/i,'Aguard.');
+}
+
+function vazio(msg){
+  if (msg) return `<div class="vazio">${msg}</div>`;
+  if (!estado.ok) return `<div class="vazio"><b>Não consegui ler os dados</b>${esc(estado.erro)}<br>Confira a origem em “Dados”.</div>`;
+  return `<div class="vazio"><b>Nada gravado em ${estado.data.split('-').reverse().join('/')}</b>
+    Abra o painel de última milha, clique no favorito e grave um ciclo.</div>`;
+}
+
+/* ---------- histórico ---------- */
+async function pintarHist(){
+  const dias = await diasGravados();
+  const d = estado.doc;
+  const rotas = d ? Object.values(d.rotas||{}) : [];
+  const r = (d&&d.resumo)||{};
+  const pp = Object.entries(r.porProcesso||{}).sort((a,b)=>b[1].media-a[1].media);
+  const topo = pp.length ? Math.max(...pp.map(([,v])=>v.media)) : 1;
+  const porOnda = {};
+  rotas.forEach(x=>{ const k = x.onda??'–'; (porOnda[k]=porOnda[k]||[]).push(x); });
+
+  $('#hist').innerHTML = `
+    <div class="linha"><span class="rot">Dias gravados</span>
+      ${dias.slice(0,14).map(x=>`<button class="bt${x===estado.data?' on':''}" data-dia="${x}">${x.split('-').reverse().slice(0,2).join('/')}</button>`).join('')||'<span class="rot">nenhum</span>'}
+      <span style="flex:1"></span><button class="bt" id="btCsv">Baixar CSV</button></div>
+    ${d ? `
+    <div class="hgrid">
+      ${kpi(rotas.length,'rotas no ciclo')}
+      ${kpi(min(r.mediaTotalMin),'tempo médio total','min')}
+      ${kpi(min(r.maiorTotalMin),'maior tempo','min')}
+      ${kpi((d.ondas||[]).length,'ondas mapeadas')}
+      ${kpi(d.iniciadoEm?hhmm(d.iniciadoEm):'–','início da gravação')}
+      ${kpi(d.atualizadoEm?hhmm(d.atualizadoEm):'–','última coleta')}
+    </div>
+    <div class="cx bloco" style="margin-bottom:12px">
+      <h3>Onde o tempo foi gasto · ${esc(estado.ciclo)} · ${estado.data.split('-').reverse().join('/')}</h3>
+      <div class="in"><div class="pp">${pp.map(([p,v])=>`
+        <div><div class="l"><span>${esc(p)} <em>${v.n} passagens · pico ${min(v.max)} min</em></span><b>${min(v.media)}</b></div>
+        <div class="t"><i style="width:${Math.max(4,Math.round(v.media/topo*100))}%;background:${proc(p).cor}"></i></div></div>`).join('')
+        || '<span class="rot">Sem fases fechadas neste ciclo.</span>'}</div></div>
+    </div>
+    <div class="cx bloco" style="margin-bottom:12px">
+      <h3>Por onda</h3>
+      <div class="in"><table class="tab"><thead><tr><th>Onda</th><th>Rotas</th><th>Despachadas</th><th>Tempo médio</th><th>Maior tempo</th></tr></thead><tbody>
+      ${Object.keys(porOnda).sort().map(k=>{
+        const g = porOnda[k], f = g.filter(x=>x.totalMin!=null).map(x=>x.totalMin);
+        return `<tr><td>${k==='–'?'não identificada':'Onda '+k}</td><td class="n">${g.length}</td><td class="n">${g.filter(x=>x.finalizada).length}</td>
+          <td class="n">${f.length?min(f.reduce((a,b)=>a+b,0)/f.length):'–'}</td><td class="n">${f.length?min(Math.max(...f)):'–'}</td></tr>`;
+      }).join('')}</tbody></table></div>
+    </div>
+    <div class="cx bloco">
+      <h3>Rota a rota</h3>
+      <div class="in"><table class="tab"><thead><tr><th>Rota</th><th>Doca</th><th>Onda</th><th>Entrou</th><th>Saiu</th><th>Total</th><th>Sequência de processos</th></tr></thead><tbody>
+      ${rotas.sort((a,b)=>(b.totalMin||b.ttMin||0)-(a.totalMin||a.ttMin||0)).map(x=>`
+        <tr><td class="n">${esc(x.rota)}</td><td>${esc(x.doca||'–')}</td><td>${x.onda??'–'}</td>
+        <td>${x.primeiroVisto?hhmm(x.primeiroVisto):'–'}</td>
+        <td>${x.finalizada?hhmm(x.fim):'<span style="color:var(--azul)">em curso</span>'}</td>
+        <td class="n">${min(x.totalMin??x.ttMin)}</td>
+        <td class="fluxo">${[...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}].filter(Boolean)
+          .map(f=>`${esc(curto(f.processo))} <b>${min(f.min)}</b>`).join(' → ')}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>` : vazio()}`;
+  $('#hist').querySelectorAll('[data-dia]').forEach(b=>b.onclick=()=>{
+    estado.data=b.dataset.dia; $('#data').value=estado.data; estado.ciclo=null; carregar();
+  });
+  const bc = $('#btCsv'); if (bc) bc.onclick = baixarCsv;
+}
+
+function baixarCsv(){
+  const d = estado.doc; if (!d) return;
+  const l = [['data','ciclo','rota','doca','onda','entrou','saiu','tempo_total_min','processo','fase_min'].join(';')];
+  Object.values(d.rotas||{}).forEach(x=>{
+    const fases = [...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}].filter(Boolean);
+    (fases.length?fases:[{processo:'',min:''}]).forEach(f=>l.push([d.data,d.ciclo,x.rota,x.doca||'',x.onda??'',
+      x.primeiroVisto?hhmm(x.primeiroVisto):'', x.finalizada?hhmm(x.fim):'', x.totalMin??x.ttMin??'', f.processo, f.min??''].join(';')));
+  });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff'+l.join('\n')],{type:'text/csv;charset=utf-8'}));
+  a.download = `processos_${d.data}_${d.ciclo}.csv`; a.click();
+}
+
+/* ---------- controles ---------- */
+$('#data').value = estado.data;
+$('#data').onchange = e => { estado.data = e.target.value; estado.ciclo = null; carregar(); };
+$('#btVista').onclick = () => {
+  estado.vista = estado.vista==='vivo' ? 'hist' : 'vivo';
+  $('#vivo').classList.toggle('oculto', estado.vista!=='vivo');
+  $('#hist').classList.toggle('oculto', estado.vista!=='hist');
+  $('#btVista').textContent = estado.vista==='vivo' ? 'Histórico' : 'Ao vivo';
+  $('#btVista').classList.toggle('on', estado.vista==='hist');
+  pintar();
+};
+$('#btCfg').onclick = () => {
+  const dlg = document.createElement('div');
+  dlg.className = 'dlg';
+  dlg.innerHTML = `<div class="box"><h3>Origem dos dados</h3>
+    <p>Com o endereço do Firebase, o time todo vê o mesmo painel. Sem ele, aparecem só as gravações feitas neste navegador.</p>
+    <input id="fbIn" placeholder="https://expedicaoprojeto1-default-rtdb.firebaseio.com" value="${esc(cfg.firebase||'')}">
+    <div class="acoes"><button class="bt" data-x>Cancelar</button><button class="bt pri" data-ok>Salvar</button></div></div>`;
+  document.body.appendChild(dlg);
+  dlg.onclick = e => { if (e.target===dlg) dlg.remove(); };
+  dlg.querySelector('[data-x]').onclick = () => dlg.remove();
+  dlg.querySelector('[data-ok]').onclick = () => {
+    cfg.firebase = dlg.querySelector('#fbIn').value.trim();
+    localStorage.setItem(K_CFG, JSON.stringify(cfg));
+    dlg.remove(); carregar();
+  };
+};
+
+/* ---------- demo ---------- */
+function dadosDemo(){
+  const t = Date.now(), m = 60000;
+  const R = (rota,doca,onda,processo,tpMin,ttMin,fases,fin)=>({rota,doca,onda,processo,tpMin,ttMin,
+    primeiroVisto:t-ttMin*m, ultimoVisto:t, fases, finalizada:!!fin, fim:fin?t-3*m:null, totalMin:fin?ttMin:null});
+  const doc = { versao:'1.0', ciclo:'PM1', data:hojeISO(), iniciadoEm:t-95*m, atualizadoEm:t-25000, operador:'Ericlis · T3',
+    ondas:[{onda:1,finalizou:'14:22',pct:85,pendentes:6,despachadas:35},{onda:2,finalizou:'14:52',pct:98,pendentes:1,despachadas:48},
+           {onda:3,finalizou:'15:22',pct:89,pendentes:6,despachadas:47},{onda:4,finalizou:'15:37',pct:87,pendentes:7,despachadas:45}],
+    rotas:{}, eventos:[] };
+  [R('VV12_PM1','93',1,'Aduana em andamento',17,17,[]),
+   R('VV19_PM1','64',1,'Aduana em andamento',14,33,[{processo:'Carregando pacotes',min:19}]),
+   R('M13_PM1','62',2,'Carregando pacotes',6,40,[{processo:'Aguardando doca',min:34}]),
+   R('SB04_PM1','71',2,'Aduana em andamento',24,52,[{processo:'Carregando pacotes',min:28}]),
+   R('CT07_PM1','58',3,'Carregando pacotes',9,9,[]),
+   R('BH31_PM1','44',3,'Aduana em andamento',11,26,[{processo:'Carregando pacotes',min:15}]),
+   R('VV02_PM1','90',1,'Carregando pacotes',31,31,[]),
+   R('GV22_PM1','67',4,'Aguardando doca',13,13,[]),
+   R('M08_PM1','61',1,'Carregando pacotes',22,38,[{processo:'Aguardando doca',min:16}],true),
+   R('VV05_PM1','92',2,'Aduana em andamento',12,29,[{processo:'Carregando pacotes',min:17}],true),
+   R('CT01_PM1','55',2,'Carregando pacotes',18,18,[],true)
+  ].forEach(x=>doc.rotas[x.rota]=x);
+  const pp = {};
+  Object.values(doc.rotas).forEach(x=>(x.fases||[]).forEach(f=>{
+    const p = pp[f.processo]||(pp[f.processo]={n:0,soma:0,max:0}); p.n++; p.soma+=f.min; p.max=Math.max(p.max,f.min);
+  }));
+  Object.values(pp).forEach(p=>p.media=Math.round(p.soma/p.n*10)/10);
+  const fin = Object.values(doc.rotas).filter(x=>x.finalizada);
+  doc.resumo = { rotas:Object.keys(doc.rotas).length, emProcesso:Object.keys(doc.rotas).length-fin.length, finalizadas:fin.length,
+    mediaTotalMin:Math.round(fin.reduce((a,b)=>a+b.totalMin,0)/fin.length*10)/10, maiorTotalMin:Math.max(...fin.map(x=>x.totalMin)), porProcesso:pp };
+  return { AM1: Object.assign({},doc,{ciclo:'AM1',atualizadoEm:t-5*3600000,resumo:Object.assign({},doc.resumo,{emProcesso:0,finalizadas:8})}), PM1: doc };
+}
+
+carregar();
+setInterval(()=>{ estado.vista==='vivo' ? carregar() : ($('#hora').textContent = hhmm(Date.now())); }, 20000);
+setInterval(()=>$('#hora').textContent = hhmm(Date.now()), 15000);
+</script>
+</body>
+</html>
