@@ -900,11 +900,14 @@ function desenharAnalise(){
       ids: it.flatMap(i=>i.ids.map(id=>({id, rota:i.rota, ciclo:i.ciclo, dia:i.dia}))) }];
   }).filter(Boolean).sort((a,b)=>b[1].n-a[1].n);
 
-  // dia em foco para o resumo dos maiores tempos
-  const diaFoco = [...new Set(docs.map(d=>d.data))].sort().reverse()[0] || estado.data;
-  const maiores = docs.filter(d=>d.data===diaFoco).flatMap(d=>
+  // todas as rotas do período selecionado
+  const maiores = docs.flatMap(d=>
       Object.values(d.rotas||{}).map(x=>Object.assign({ciclo:d.ciclo, dia:d.data}, x)))
     .sort((a,b)=>((b.totalMin??b.ttMin)||0)-((a.totalMin??a.ttMin)||0));
+  const variosDias = dias.length > 1;
+  const periodo = variosDias
+    ? `${dias[dias.length-1].split('-').reverse().slice(0,2).join('/')} a ${dias[0].split('-').reverse().slice(0,2).join('/')}`
+    : (dias[0]||estado.data).split('-').reverse().join('/');
 
   $('#analise').innerHTML = cabec + `
     <div class="hgrid">
@@ -994,20 +997,20 @@ function desenharAnalise(){
     </details>`:''}
 
     <div class="cx bloco">
-      <h3>Maiores tempos de ${(diaFoco||estado.data).split('-').reverse().join('/')} — do carregamento até expedir
-        <span style="color:var(--mudo);font-weight:500"> · ${maiores.length} rotas, da mais lenta para a mais rápida</span></h3>
+      <h3>Tempos por rota · ${periodo}
+        <span style="color:var(--mudo);font-weight:500"> · ${maiores.length} rotas${an.ciclo!=='todos'?` · ciclo ${esc(an.ciclo)}`:''}, da mais lenta para a mais rápida</span></h3>
       <div class="in"><div class="rolatab"><table class="tab"><thead><tr>
-        <th>Rota</th><th>Ciclo</th><th>Onda</th><th>Transportadora</th><th>Processos</th>
+        <th>Rota</th>${variosDias?'<th>Dia</th>':''}<th>Ciclo</th><th>Onda</th><th>Transportadora</th><th>Processos</th>
         <th>Aduana feita por</th><th>Faltantes</th><th>Até expedir</th><th>Saiu</th></tr></thead><tbody>
       ${maiores.length ? maiores.map(x=>`
-        <tr><td class="n">${esc(x.rota)}</td><td>${esc(x.ciclo)}</td><td>${x.onda??'–'}</td>
+        <tr><td class="n">${esc(x.rota)}</td>${variosDias?`<td>${x.dia.split('-').reverse().slice(0,2).join('/')}</td>`:''}<td>${esc(x.ciclo)}</td><td>${x.onda??'–'}</td>
         <td>${esc(x.transportadora||'–')}</td>
         <td class="fluxo">${seqChips(x)}</td>
         <td>${esc((x.auditoria&&x.auditoria.rep)||(x.teveAduana?'aduana sem auditoria casada':'–'))}</td>
         <td>${faltantes(x)}</td>
         <td class="n" style="color:${(x.totalMin??x.ttMin)>=LIMITES.critico?'var(--vermelho)':'inherit'}">${min(x.totalMin??x.ttMin)}</td>
         <td>${x.finalizada&&x.fim?hhmm(x.fim):'<span style="color:var(--azul)">em curso</span>'}</td></tr>`).join('')
-      : `<tr><td colspan="9" class="rot">Nada gravado neste dia ainda.</td></tr>`}
+      : `<tr><td colspan="${variosDias?10:9}" class="rot">Nada gravado no período ainda.</td></tr>`}
       </tbody></table></div></div>
     </div>`;
   ligarAnalise(fases);
