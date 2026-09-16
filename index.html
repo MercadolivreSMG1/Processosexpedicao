@@ -208,6 +208,18 @@ html[data-tema=escuro] #alerta{background:rgba(242,61,79,.14);border-color:rgba(
   border-left:3px solid var(--cor);border-radius:8px;padding:4px 9px;font:500 11.5px Inter;color:var(--tinta);white-space:nowrap}
 .seq .p b{font:600 12.5px 'Space Grotesk';letter-spacing:-.2px}
 .tab td.fluxo{white-space:normal;min-width:260px}
+details.bloco>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;padding:12px 14px;
+  font:600 13px Inter;color:var(--tinta)}
+details.bloco>summary::-webkit-details-marker{display:none}
+details.bloco>summary:before{content:'';width:0;height:0;border:5px solid transparent;border-left-color:var(--mudo);
+  transition:transform .2s;transform-origin:25% 50%}
+details.bloco[open]>summary:before{transform:rotate(90deg)}
+details.bloco>summary em{font-style:normal;color:var(--mudo);font-weight:500;font-size:12px}
+details.bloco>summary:hover{background:var(--superf2)}
+.rolatab{max-height:62vh;overflow:auto}
+.rolatab::-webkit-scrollbar{width:10px}
+.rolatab::-webkit-scrollbar-thumb{background:#CBD3DC;border-radius:8px}
+html[data-tema=escuro] .rolatab::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16)}
 
 @media (prefers-reduced-motion:reduce){
   .entra,.rota.sai,.met b.sobe{animation:none}
@@ -892,7 +904,7 @@ function desenharAnalise(){
   const diaFoco = [...new Set(docs.map(d=>d.data))].sort().reverse()[0] || estado.data;
   const maiores = docs.filter(d=>d.data===diaFoco).flatMap(d=>
       Object.values(d.rotas||{}).map(x=>Object.assign({ciclo:d.ciclo, dia:d.data}, x)))
-    .sort((a,b)=>((b.totalMin??b.ttMin)||0)-((a.totalMin??a.ttMin)||0)).slice(0,25);
+    .sort((a,b)=>((b.totalMin??b.ttMin)||0)-((a.totalMin??a.ttMin)||0));
 
   $('#analise').innerHTML = cabec + `
     <div class="hgrid">
@@ -926,8 +938,8 @@ function desenharAnalise(){
       }).join('')}</div></div>
     </div>`:''}
 
-    <div class="cx bloco" style="margin-bottom:12px">
-      <h3>Por ciclo</h3>
+    <details class="cx bloco" data-bloco="ciclo"${aberto('ciclo')} style="margin-bottom:12px">
+      <summary>Por ciclo <em>tempo médio e p90 de cada ciclo</em></summary>
       <div class="in"><table class="tab"><thead><tr><th>Ciclo</th><th>Rotas</th><th>Média total</th><th>p90</th><th>Pico</th>${linhasProc.slice(0,3).map(l=>`<th>${esc(curto(l.p))}</th>`).join('')}</tr></thead><tbody>
       ${Object.keys(porCiclo).sort().map(c=>{
         const v = porCiclo[c];
@@ -939,32 +951,32 @@ function desenharAnalise(){
           }).join('')}</tr>`;
       }).join('')}
       </tbody></table></div>
-    </div>
+    </details>
 
     ${Object.keys(porArea).length?`
-    <div class="cx bloco" style="margin-bottom:12px">
-      <h3>Por tipo de área</h3>
+    <details class="cx bloco" data-bloco="area"${aberto('area')} style="margin-bottom:12px">
+      <summary>Por tipo de área <em>comercial, distante, risco</em></summary>
       <div class="in"><table class="tab"><thead><tr><th>Área</th><th>Rotas</th><th>Média total</th><th>p90</th><th>SPR médio</th></tr></thead><tbody>
       ${Object.entries(porArea).sort((a,b)=>(media(b[1].tot)||0)-(media(a[1].tot)||0)).map(([n,o])=>`
         <tr><td>${esc(n)}</td><td class="n">${o.rotas}</td><td class="n">${min(media(o.tot))}</td>
         <td class="n">${min(pct(o.tot,90))}</td><td class="n">${o.spr.length?Math.round(media(o.spr)):'–'}</td></tr>`).join('')}
       </tbody></table></div>
-    </div>`:''}
+    </details>`:''}
 
     ${Object.keys(porTr).length?`
-    <div class="cx bloco" style="margin-bottom:12px">
-      <h3>Por transportadora</h3>
+    <details class="cx bloco" data-bloco="transp"${aberto('transp')} style="margin-bottom:12px">
+      <summary>Por transportadora <em>${Object.keys(porTr).length} na janela</em></summary>
       <div class="in"><table class="tab"><thead><tr><th>Transportadora</th><th>Rotas</th><th>Média total</th><th>p90</th><th>Média de aduana</th><th>Faltantes</th></tr></thead><tbody>
       ${Object.entries(porTr).sort((a,b)=>(media(b[1].tot)||0)-(media(a[1].tot)||0)).map(([n,o])=>`
         <tr><td>${esc(n)}</td><td class="n">${o.rotas}</td><td class="n">${min(media(o.tot))}</td>
         <td class="n">${min(pct(o.tot,90))}</td><td class="n">${min(media(o.adu))}</td>
         <td class="n" style="color:${o.falt?'var(--vermelho)':'inherit'}">${o.falt}</td></tr>`).join('')}
       </tbody></table></div>
-    </div>`:''}
+    </details>`:''}
 
     ${Object.keys(porRep).length?`
-    <div class="cx bloco" style="margin-bottom:12px">
-      <h3>Aduana por rep</h3>
+    <details class="cx bloco" data-bloco="reps"${aberto('reps')} style="margin-bottom:12px">
+      <summary>Aduana por rep <em>${repsFiltrados.length} reps · clique para ocultar</em></summary>
       <div class="in">
         <div class="linha" style="margin-bottom:10px"><span class="rot">Ciclo da aduana</span>
           ${['todos',...ciclosRep].map(c=>`<button class="bt${an.repCiclo===c?' on':''}" data-rc="${c}">${c==='todos'?'todos':c}</button>`).join('')}
@@ -979,11 +991,12 @@ function desenharAnalise(){
             <span class="rot" style="font-size:11.5px">${o.ids.map(i=>`${esc(i.id)} (${esc(i.rota)}${i.ciclo?' · '+esc(i.ciclo):''})`).join(', ')}</span></details>`:'–'}</td></tr>`).join('')}
         </tbody></table>
       </div>
-    </div>`:''}
+    </details>`:''}
 
     <div class="cx bloco">
-      <h3>Maiores tempos de ${(diaFoco||estado.data).split('-').reverse().join('/')} — do carregamento até expedir</h3>
-      <div class="in"><table class="tab"><thead><tr>
+      <h3>Maiores tempos de ${(diaFoco||estado.data).split('-').reverse().join('/')} — do carregamento até expedir
+        <span style="color:var(--mudo);font-weight:500"> · ${maiores.length} rotas, da mais lenta para a mais rápida</span></h3>
+      <div class="in"><div class="rolatab"><table class="tab"><thead><tr>
         <th>Rota</th><th>Ciclo</th><th>Onda</th><th>Transportadora</th><th>Processos</th>
         <th>Aduana feita por</th><th>Faltantes</th><th>Até expedir</th><th>Saiu</th></tr></thead><tbody>
       ${maiores.length ? maiores.map(x=>`
@@ -995,7 +1008,7 @@ function desenharAnalise(){
         <td class="n" style="color:${(x.totalMin??x.ttMin)>=LIMITES.critico?'var(--vermelho)':'inherit'}">${min(x.totalMin??x.ttMin)}</td>
         <td>${x.finalizada&&x.fim?hhmm(x.fim):'<span style="color:var(--azul)">em curso</span>'}</td></tr>`).join('')
       : `<tr><td colspan="9" class="rot">Nada gravado neste dia ainda.</td></tr>`}
-      </tbody></table></div>
+      </tbody></table></div></div>
     </div>`;
   ligarAnalise(fases);
 }
@@ -1009,6 +1022,11 @@ function faltantes(x){
   return `<details><summary style="cursor:pointer;color:var(--vermelho);font-weight:600">${n} faltante${n>1?'s':''}</summary>
     <span class="rot" style="font-size:11.5px">${ids||'ids não capturados'}</span></details>`;
 }
+const K_BLOCOS='mlOndas:blocos';
+const blocos = Object.assign({reps:true, transp:true, area:true, ciclo:true},
+  JSON.parse(localStorage.getItem(K_BLOCOS)||'{}'));
+function aberto(k){ return blocos[k] ? ' open' : ''; }
+function guardarBlocos(){ localStorage.setItem(K_BLOCOS, JSON.stringify(blocos)); }
 function valido(p){ const t=String(p||'').trim(); return t.length>1 && t!=='-' && t!=='–'; }
 function media(a){ return a.length ? a.reduce((x,y)=>x+y,0)/a.length : null; }
 function procCor(p){ return proc(p).cor; }
@@ -1017,6 +1035,9 @@ function ligarAnalise(fases){
   $('#analise').querySelectorAll('[data-j]').forEach(b=>b.onclick=()=>{ an.janela=+b.dataset.j; an.docs=null; pintarAnalise(); });
   $('#analise').querySelectorAll('[data-cic]').forEach(b=>b.onclick=()=>{ an.ciclo=b.dataset.cic; desenharAnalise(); });
   $('#analise').querySelectorAll('[data-rc]').forEach(b=>b.onclick=()=>{ an.repCiclo=b.dataset.rc; desenharAnalise(); });
+  $('#analise').querySelectorAll('[data-bloco]').forEach(el=>el.addEventListener('toggle',()=>{
+    blocos[el.dataset.bloco] = el.open; guardarBlocos();
+  }));
   const bc = $('#btCsvAn');
   if (bc) bc.onclick = () => {
     const l = [['dia','ciclo','rota','onda','doca','transportadora','placa','area','spr','aduana_rep','aduana_min','faltantes','processo','minutos'].join(';')];
