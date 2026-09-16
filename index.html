@@ -85,7 +85,7 @@ html[data-tema=escuro] .campo{border-color:var(--borda);background:rgba(255,255,
 .onda .t2{margin-top:3px;font:600 20px/1.1 'Space Grotesk';letter-spacing:-.6px}
 .onda .t2 span{font:500 12px Inter;color:var(--mudo);letter-spacing:0}
 .onda .t3{margin-top:2px;font:500 11.5px Inter;color:var(--mudo)}
-.onda.zerada .t2{color:var(--verde)}
+.onda.zerada .t2{color:var(--verde);font-size:16px}
 
 .grade{flex:1;min-height:0;display:grid;grid-template-columns:1fr 300px;gap:12px}
 .quadro{display:flex;flex-direction:column;min-height:0;overflow:hidden}
@@ -154,6 +154,11 @@ html[data-tema=escuro] .chip.ok{background:rgba(0,166,80,.14);border-color:rgba(
 /* ---------- histórico ---------- */
 .hist{flex:1;min-height:0;overflow:auto;padding:14px 20px 8px}
 .hist .pp{max-width:760px}
+.tend{display:flex;align-items:flex-end;gap:10px;height:170px;padding-top:6px}
+.tend .col{flex:1;min-width:34px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:5px}
+.tend .col i{display:block;width:100%;max-width:56px;border-radius:7px 7px 3px 3px;background:linear-gradient(180deg,var(--azul),#6BA6FF)}
+.tend .col .vl{font:600 12px 'Space Grotesk'}
+.tend .col .dt{font:500 11px Inter;color:var(--mudo)}
 .hist .linha{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .hist .linha .rot{font:500 12.5px Inter;color:var(--mudo)}
 .hgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:12px}
@@ -194,6 +199,7 @@ html[data-tema=escuro] .chip.ok{background:rgba(0,166,80,.14);border-color:rgba(
     <div class="ctr">
       <input type="date" class="campo" id="data">
       <button class="bt" id="btVista">Histórico</button>
+      <button class="bt" id="btAnalise">Análise</button>
       <button class="bt" id="btTema" title="Alternar tema">Modo escuro</button>
       <button class="bt" id="btCfg" title="Origem dos dados">Dados</button>
       <span class="hora" id="hora">--:--</span>
@@ -226,6 +232,7 @@ html[data-tema=escuro] .chip.ok{background:rgba(0,166,80,.14);border-color:rgba(
 
   <!-- HISTÓRICO -->
   <div class="hist oculto" id="hist"></div>
+  <div class="hist oculto" id="analise"></div>
 
   <div class="assina">Criado por Ericlis TL SMG1</div>
 </div>
@@ -264,7 +271,9 @@ function min(v){ if(v==null) return '–'; return v>=60 ? Math.floor(v/60)+'h'+S
 function esc(s){ return String(s??'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
 
 const PROCS = [
-  [/aduana/i,            '#FFB800', false],
+  [/antes da grava/i,    '#C3CDDA', false],
+  [/expedid|despachad/i, '#00A650', true ],
+  [/aduana|auditor/i,    '#FFB800', false],
   [/carreg|cargando|load/i,'#3483FA', true ],
   [/aguard|espera|pendi|pausa|fila/i,'#96A2B0', true],
   [/finaliz|despach|conclu|salida|sa[ií]da/i,'#00A650', true],
@@ -278,6 +287,7 @@ function proc(p){
 
 /* ---------- dados ---------- */
 async function buscarDia(data){
+  if (demo) return dadosDemo(data);
   if (cfg.firebase){
     const r = await fetch(cfg.firebase.replace(/\/+$/,'')+'/monitor-ondas/'+data+'.json',{cache:'no-store'});
     if (!r.ok) throw new Error('o Firebase respondeu '+r.status);
@@ -291,6 +301,7 @@ async function buscarDia(data){
   return out;
 }
 async function diasGravados(){
+  if (demo){ const d=[]; for(let i=0;i<6;i++){ const x=new Date(); x.setDate(x.getDate()-i); d.push(hojeISO(x)); } return d; }
   if (cfg.firebase){
     try{
       const r = await fetch(cfg.firebase.replace(/\/+$/,'')+'/monitor-ondas.json?shallow=true',{cache:'no-store'});
@@ -326,7 +337,9 @@ function pintar(){
   $('#ciclos').querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{
     estado.ciclo=b.dataset.c; estado.doc=estado.ciclos[estado.ciclo]; pintar();
   });
-  if (estado.vista==='vivo') pintarVivo(); else pintarHist();
+  if (estado.vista==='vivo') pintarVivo();
+  else if (estado.vista==='hist') pintarHist();
+  else pintarAnalise();
 }
 
 /* ---------- ao vivo ---------- */
@@ -344,13 +357,14 @@ function pintarVivo(){
   $('#ondas').innerHTML = (d.ondas||[]).map(o=>{
     const tot = (o.pendentes||0)+(o.despachadas||0);
     const p = tot ? Math.round((o.despachadas||0)/tot*100) : (o.pct||0);
-    const cor = o.pendentes===0 ? 'var(--verde)' : p>=90 ? 'var(--azul)' : 'var(--ambar)';
-    return `<div class="cx onda${o.pendentes===0?' zerada':''}">
-      <div class="anel" style="--p:${p};--cor:${cor}"><i>${p}%</i></div>
+    const fim = o.pendentes===0;
+    const cor = fim ? 'var(--verde)' : p>=90 ? 'var(--azul)' : 'var(--ambar)';
+    return `<div class="cx onda${fim?' zerada':''}">
+      <div class="anel" style="--p:${fim?100:p};--cor:${cor}"><i>${fim?'✓':p+'%'}</i></div>
       <div class="txt">
         <div class="t1">Onda ${o.onda}${o.finalizou?`<small>fechou ${o.finalizou}</small>`:''}</div>
-        <div class="t2">${o.pendentes??'–'} <span>pendentes</span></div>
-        <div class="t3">${o.despachadas??'–'} de ${tot||'–'} despachadas</div>
+        <div class="t2">${fim?'Encerrada':(o.pendentes??'–')} <span>${fim?'':'pendentes'}</span></div>
+        <div class="t3">${o.despachadas??'–'}${fim?'':` de ${tot||'–'}`} despachadas</div>
       </div></div>`;
   }).join('') || `<div class="cx onda"><div class="txt"><div class="t1">Sem ondas lidas</div>
       <div class="t2"><span>o favorito ainda não achou os cartões de onda na tela</span></div></div></div>`;
@@ -397,7 +411,8 @@ function linha(r){
   const aduanaLenta = /aduana/i.test(r.processo||'') && tp>=LIMITES.aduana;
   return `<div class="rota${cls}">
     <div class="ac" style="background:${at.cor}"></div>
-    <div class="idr"><b>${esc(r.rota)}</b><span>doca ${esc(r.doca||'–')}${r.onda!=null?` · onda ${r.onda}`:''}</span></div>
+    <div class="idr"><b>${esc(r.rota)}</b><span>doca ${esc(r.doca||'–')}${r.onda!=null?` · onda ${r.onda}`:''}${
+      r.transportadora?`<br>${esc(r.transportadora)}`:''}</span></div>
     <span class="pill"><i style="background:${at.cor}"></i><span>${esc(r.processo||'–')}</span></span>
     <div class="trilha">${trilha}</div>
     <div class="met${aduanaLenta?' quente':''}"><b>${min(tp)}</b><span>no processo</span></div>
@@ -425,6 +440,7 @@ async function pintarHist(){
   const topo = pp.length ? Math.max(...pp.map(([,v])=>v.media)) : 1;
   const porOnda = {};
   rotas.forEach(x=>{ const k = x.onda??'–'; (porOnda[k]=porOnda[k]||[]).push(x); });
+  const cruz = rotas.some(x=>x.transportadora || x.auditoria);
 
   $('#hist').innerHTML = `
     <div class="linha"><span class="rot">Dias gravados</span>
@@ -457,9 +473,10 @@ async function pintarHist(){
     </div>
     <div class="cx bloco">
       <h3>Rota a rota</h3>
-      <div class="in"><table class="tab"><thead><tr><th>Rota</th><th>Doca</th><th>Onda</th><th>Entrou</th><th>Saiu</th><th>Total</th><th>Sequência de processos</th></tr></thead><tbody>
+      <div class="in"><table class="tab"><thead><tr><th>Rota</th><th>Doca</th><th>Onda</th>${cruz?'<th>Transportadora</th><th>Aduana feita por</th><th>Faltantes</th>':''}<th>Entrou</th><th>Saiu</th><th>Total</th><th>Sequência de processos</th></tr></thead><tbody>
       ${rotas.sort((a,b)=>(b.totalMin||b.ttMin||0)-(a.totalMin||a.ttMin||0)).map(x=>`
         <tr><td class="n">${esc(x.rota)}</td><td>${esc(x.doca||'–')}</td><td>${x.onda??'–'}</td>
+        ${cruz?`<td>${esc(x.transportadora||'–')}</td><td>${esc((x.auditoria&&x.auditoria.rep)||'–')}</td><td>${faltantes(x)}</td>`:''}
         <td>${x.primeiroVisto?hhmm(x.primeiroVisto):'–'}</td>
         <td>${x.finalizada?hhmm(x.fim):'<span style="color:var(--azul)">em curso</span>'}</td>
         <td class="n">${min(x.totalMin??x.ttMin)}</td>
@@ -489,14 +506,17 @@ function baixarCsv(){
 /* ---------- controles ---------- */
 $('#data').value = estado.data;
 $('#data').onchange = e => { estado.data = e.target.value; estado.ciclo = null; carregar(); };
-$('#btVista').onclick = () => {
-  estado.vista = estado.vista==='vivo' ? 'hist' : 'vivo';
-  $('#vivo').classList.toggle('oculto', estado.vista!=='vivo');
-  $('#hist').classList.toggle('oculto', estado.vista!=='hist');
-  $('#btVista').textContent = estado.vista==='vivo' ? 'Histórico' : 'Ao vivo';
-  $('#btVista').classList.toggle('on', estado.vista==='hist');
+function mostrar(v){
+  estado.vista = v;
+  $('#vivo').classList.toggle('oculto', v!=='vivo');
+  $('#hist').classList.toggle('oculto', v!=='hist');
+  $('#analise').classList.toggle('oculto', v!=='analise');
+  $('#btVista').classList.toggle('on', v==='hist');
+  $('#btAnalise').classList.toggle('on', v==='analise');
   pintar();
-};
+}
+$('#btVista').onclick = () => mostrar(estado.vista==='hist' ? 'vivo' : 'hist');
+$('#btAnalise').onclick = () => mostrar(estado.vista==='analise' ? 'vivo' : 'analise');
 $('#btCfg').onclick = () => {
   const dlg = document.createElement('div');
   dlg.className = 'dlg';
@@ -514,13 +534,178 @@ $('#btCfg').onclick = () => {
   };
 };
 
+
+/* ---------- análise multi-dia ---------- */
+const an = { janela:7, ciclo:'todos', docs:null, carregando:false, chave:'' };
+
+async function pintarAnalise(){
+  const chave = an.janela+'|'+(cfg.firebase||'local');
+  if (an.carregando) return;
+  if (!an.docs || an.chave !== chave){ an.chave = chave; return carregarAnalise(); }
+  desenharAnalise();
+}
+
+async function carregarAnalise(){
+  an.carregando = true;
+  $('#analise').innerHTML = `<div class="vazio"><b>Juntando os ciclos gravados…</b>lendo os últimos ${an.janela} dias</div>`;
+  const dias = (await diasGravados()).slice(0, an.janela);
+  const docs = [];
+  for (const dia of dias){
+    try { Object.values(await buscarDia(dia)).forEach(d => { if (d && d.rotas) docs.push(d); }); } catch(e){}
+  }
+  an.docs = docs; an.carregando = false;
+  desenharAnalise();
+}
+
+function pct(arr,p){
+  if (!arr.length) return null;
+  const a = [...arr].sort((x,y)=>x-y);
+  return a[Math.min(a.length-1, Math.floor(p/100*a.length))];
+}
+
+function desenharAnalise(){
+  const docs = (an.docs||[]).filter(d => an.ciclo==='todos' || d.ciclo===an.ciclo);
+  const ciclos = [...new Set((an.docs||[]).map(d=>d.ciclo))].sort();
+  const cabec = `
+    <div class="linha"><span class="rot">Janela</span>
+      ${[7,14,30].map(n=>`<button class="bt${an.janela===n?' on':''}" data-j="${n}">${n} dias</button>`).join('')}
+      <span class="rot" style="margin-left:10px">Ciclo</span>
+      ${['todos',...ciclos].map(c=>`<button class="bt${an.ciclo===c?' on':''}" data-cic="${c}">${c==='todos'?'todos':c}</button>`).join('')}
+      <span style="flex:1"></span>
+      <button class="bt" id="btCsvAn">Baixar base de fases</button></div>`;
+
+  if (!docs.length){
+    $('#analise').innerHTML = cabec + `<div class="vazio"><b>Ainda não há ciclos suficientes</b>
+      Grave alguns ciclos do começo ao fim e a análise se monta sozinha aqui.</div>`;
+    ligarAnalise(); return;
+  }
+
+  // coleta de fases e totais
+  const fases = [], totais = [], porDia = {}, porCiclo = {}, rotasTop = [];
+  docs.forEach(d=>{
+    Object.values(d.rotas||{}).forEach(x=>{
+      const tot = x.totalMin ?? x.ttMin;
+      const seq = [...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}].filter(Boolean);
+      seq.forEach(f=>{ if (f.min!=null && !/antes da grava/i.test(f.processo||'')) fases.push({p:f.processo, m:f.min, dia:d.data, ciclo:d.ciclo, rota:x.rota}); });
+      if (x.finalizada && tot!=null){
+        totais.push(tot);
+        (porDia[d.data] = porDia[d.data]||[]).push(tot);
+        (porCiclo[d.ciclo] = porCiclo[d.ciclo]||[]).push(tot);
+        rotasTop.push({rota:x.rota, dia:d.data, ciclo:d.ciclo, tot, onda:x.onda, doca:x.doca,
+          seq: seq.map(f=>`${curto(f.processo)} ${min(f.min)}`).join(' → ')});
+      }
+    });
+  });
+
+  const proc = {};
+  fases.forEach(f=>{ const o = proc[f.p]=proc[f.p]||{v:[]}; o.v.push(f.m); });
+  const linhasProc = Object.entries(proc).map(([p,o])=>({
+    p, n:o.v.length, media:o.v.reduce((a,b)=>a+b,0)/o.v.length, p90:pct(o.v,90), pico:Math.max(...o.v),
+    soma:o.v.reduce((a,b)=>a+b,0)
+  })).sort((a,b)=>b.soma-a.soma);
+  const somaGeral = linhasProc.reduce((a,b)=>a+b.soma,0)||1;
+  const topoMedia = Math.max(...linhasProc.map(l=>l.media),1);
+  const dias = Object.keys(porDia).sort();
+  const maxDia = Math.max(...dias.map(d=>media(porDia[d])),1);
+  const fora = totais.filter(v=>v>=LIMITES.critico).length;
+
+  $('#analise').innerHTML = cabec + `
+    <div class="hgrid">
+      ${kpi(totais.length,'rotas concluídas')}
+      ${kpi(min(media(totais)),'tempo médio total','min')}
+      ${kpi(min(pct(totais,90)),'p90 do tempo total','min')}
+      ${kpi(totais.length?Math.round(fora/totais.length*100)+'%':'–','acima de '+LIMITES.critico+' min')}
+      ${kpi(docs.length,'ciclos na janela')}
+      ${kpi(dias.length,'dias com gravação')}
+    </div>
+
+    <div class="cx bloco" style="margin-bottom:12px">
+      <h3>Tempo por processo — onde o ciclo perde tempo</h3>
+      <div class="in"><table class="tab"><thead><tr><th>Processo</th><th>Passagens</th><th>Média</th><th>p90</th><th>Pico</th><th>Fatia do tempo</th></tr></thead><tbody>
+      ${linhasProc.map(l=>`<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${procCor(l.p)};margin-right:7px"></span>${esc(l.p)}</td>
+        <td class="n">${l.n}</td><td class="n">${min(l.media)}</td><td class="n">${min(l.p90)}</td><td class="n">${min(l.pico)}</td>
+        <td style="min-width:180px"><div class="t" style="height:8px;border-radius:5px;background:var(--trilho);overflow:hidden">
+          <i style="display:block;height:100%;width:${Math.max(3,Math.round(l.soma/somaGeral*100))}%;background:${procCor(l.p)}"></i></div>
+          <span class="rot">${Math.round(l.soma/somaGeral*100)}% do tempo somado</span></td></tr>`).join('')}
+      </tbody></table></div>
+    </div>
+
+    <div class="cx bloco" style="margin-bottom:12px">
+      <h3>Tempo médio total por dia</h3>
+      <div class="in"><div class="tend">${dias.map(d=>{
+        const v = media(porDia[d]);
+        return `<div class="col" title="${d} · ${min(v)} min · ${porDia[d].length} rotas">
+          <span class="vl">${min(v)}</span><i style="height:${Math.max(4,Math.round(v/maxDia*100))}%"></i>
+          <span class="dt">${d.split('-').reverse().slice(0,2).join('/')}</span></div>`;
+      }).join('')}</div></div>
+    </div>
+
+    <div class="cx bloco" style="margin-bottom:12px">
+      <h3>Por ciclo</h3>
+      <div class="in"><table class="tab"><thead><tr><th>Ciclo</th><th>Rotas</th><th>Média total</th><th>p90</th><th>Pico</th>${linhasProc.slice(0,3).map(l=>`<th>${esc(curto(l.p))}</th>`).join('')}</tr></thead><tbody>
+      ${Object.keys(porCiclo).sort().map(c=>{
+        const v = porCiclo[c];
+        return `<tr><td class="n">${esc(c)}</td><td class="n">${v.length}</td><td class="n">${min(media(v))}</td>
+          <td class="n">${min(pct(v,90))}</td><td class="n">${min(Math.max(...v))}</td>
+          ${linhasProc.slice(0,3).map(l=>{
+            const f = fases.filter(x=>x.ciclo===c && x.p===l.p).map(x=>x.m);
+            return `<td class="n">${f.length?min(media(f)):'–'}</td>`;
+          }).join('')}</tr>`;
+      }).join('')}
+      </tbody></table></div>
+    </div>
+
+    <div class="cx bloco">
+      <h3>As 15 rotas mais lentas da janela</h3>
+      <div class="in"><table class="tab"><thead><tr><th>Rota</th><th>Dia</th><th>Ciclo</th><th>Onda</th><th>Doca</th><th>Total</th><th>Sequência</th></tr></thead><tbody>
+      ${rotasTop.sort((a,b)=>b.tot-a.tot).slice(0,15).map(r=>`<tr><td class="n">${esc(r.rota)}</td>
+        <td>${r.dia.split('-').reverse().slice(0,2).join('/')}</td><td>${esc(r.ciclo)}</td><td>${r.onda??'–'}</td><td>${esc(r.doca||'–')}</td>
+        <td class="n" style="color:${r.tot>=LIMITES.critico?'var(--vermelho)':'inherit'}">${min(r.tot)}</td>
+        <td class="fluxo">${esc(r.seq)}</td></tr>`).join('')}
+      </tbody></table></div>
+    </div>`;
+  ligarAnalise(fases);
+}
+
+function faltantes(x){
+  const a = x.auditoria;
+  if (!a) return '–';
+  const n = a.faltantes ?? 0;
+  if (!n) return '<span style="color:var(--verde)">0</span>';
+  const ids = (a.faltantesIds||[]).map(esc).join(', ');
+  return `<details><summary style="cursor:pointer;color:var(--vermelho);font-weight:600">${n} faltante${n>1?'s':''}</summary>
+    <span class="rot" style="font-size:11.5px">${ids||'ids não capturados'}</span></details>`;
+}
+function media(a){ return a.length ? a.reduce((x,y)=>x+y,0)/a.length : null; }
+function procCor(p){ return proc(p).cor; }
+
+function ligarAnalise(fases){
+  $('#analise').querySelectorAll('[data-j]').forEach(b=>b.onclick=()=>{ an.janela=+b.dataset.j; an.docs=null; pintarAnalise(); });
+  $('#analise').querySelectorAll('[data-cic]').forEach(b=>b.onclick=()=>{ an.ciclo=b.dataset.cic; desenharAnalise(); });
+  const bc = $('#btCsvAn');
+  if (bc) bc.onclick = () => {
+    const l = [['dia','ciclo','rota','onda','doca','processo','minutos'].join(';')];
+    (an.docs||[]).filter(d=>an.ciclo==='todos'||d.ciclo===an.ciclo).forEach(d=>{
+      Object.values(d.rotas||{}).forEach(x=>{
+        [...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}].filter(Boolean)
+          .forEach(f=>l.push([d.data,d.ciclo,x.rota,x.onda??'',x.doca||'',f.processo,f.min??''].join(';')));
+      });
+    });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff'+l.join('\n')],{type:'text/csv;charset=utf-8'}));
+    a.download = `fases_${an.janela}dias_${an.ciclo}.csv`; a.click();
+  };
+}
+
 /* ---------- demo ---------- */
-function dadosDemo(){
+function dadosDemo(dia){
   const t = Date.now(), m = 60000;
-  const R = (rota,doca,onda,processo,tpMin,ttMin,fases,fin)=>({rota,doca,onda,processo,tpMin,ttMin,
-    primeiroVisto:t-ttMin*m, ultimoVisto:t, fases, finalizada:!!fin, fim:fin?t-3*m:null, totalMin:fin?ttMin:null});
-  const doc = { versao:'1.0', ciclo:'PM1', data:hojeISO(), iniciadoEm:t-95*m, atualizadoEm:t-25000, operador:'Ericlis · T3',
-    ondas:[{onda:1,finalizou:'14:22',pct:85,pendentes:6,despachadas:35},{onda:2,finalizou:'14:52',pct:98,pendentes:1,despachadas:48},
+  const f = dia ? 0.8 + ((parseInt(dia.replace(/-/g,'').slice(-3),10)%7)/10) : 1;
+  const R = (rota,doca,onda,processo,tp0,tt0,fases0,fin)=>({rota,doca,onda,processo,
+    tpMin:Math.round(tp0*f), ttMin:Math.round(tt0*f), fases:(fases0||[]).map(x=>({processo:x.processo,min:Math.round(x.min*f)})),
+    primeiroVisto:t-Math.round(tt0*f)*m, ultimoVisto:t, finalizada:!!fin, fim:fin?t-3*m:null, totalMin:fin?Math.round(tt0*f):null});
+  const doc = { versao:'1.0', ciclo:'PM1', data:dia||hojeISO(), iniciadoEm:t-95*m, atualizadoEm:t-25000, operador:'Ericlis · T3',
+    ondas:[{onda:1,finalizou:'14:22',pct:85,pendentes:6,despachadas:35},{onda:2,pendentes:0,despachadas:49,concluida:true},
            {onda:3,finalizou:'15:22',pct:89,pendentes:6,despachadas:47},{onda:4,finalizou:'15:37',pct:87,pendentes:7,despachadas:45}],
     rotas:{}, eventos:[] };
   [R('VV12_PM1','93',1,'Aduana em andamento',17,17,[]),
