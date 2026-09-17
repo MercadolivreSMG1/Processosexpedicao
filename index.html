@@ -100,7 +100,7 @@ html[data-tema=escuro] .campo{border-color:var(--borda);background:rgba(255,255,
 html[data-tema=escuro] .rolo::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16)}
 
 /* ---------- linha de rota ---------- */
-.rota{display:grid;grid-template-columns:8px 138px 186px 1fr 78px 82px;align-items:center;gap:13px;
+.rota{display:grid;grid-template-columns:8px 176px 186px 1fr 78px 82px;align-items:center;gap:13px;
   background:var(--superf2);border:1px solid var(--borda);border-radius:11px;padding:10px 14px 10px 0;margin-bottom:7px}
 .rota .ac{width:8px;height:100%;min-height:44px;border-radius:11px 0 0 11px;background:var(--azul)}
 .rota.atencao{border-color:#F3D89B}
@@ -200,6 +200,10 @@ html[data-tema=escuro] #alerta{background:rgba(242,61,79,.14);border-color:rgba(
 .rota{transition:background .35s,border-color .35s}
 .rolo{display:flex;flex-direction:column}
 .falt{color:var(--vermelho);font-weight:600}
+.rep{color:var(--tinta);font-weight:500}
+.rep em{font-style:normal;color:var(--mudo);font-weight:500}
+.rep.ativo{color:#8A6100;font-weight:600}
+html[data-tema=escuro] .rep.ativo{color:var(--ambar)}
 .kpi b{transition:color .3s}
 
 /* sequência de processos em etiquetas */
@@ -371,7 +375,7 @@ rotuloTema();
 
 function hojeISO(d=new Date()){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function hhmm(ts){ const d=new Date(ts); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
-function min(v){ if(v==null) return '–'; return v>=60 ? Math.floor(v/60)+'h'+String(Math.round(v%60)).padStart(2,'0') : String(Math.round(v*10)/10); }
+function min(v){ if(v==null || v>48*60) return '–'; return v>=60 ? Math.floor(v/60)+'h'+String(Math.round(v%60)).padStart(2,'0') : String(Math.round(v*10)/10); }
 function esc(s){ return String(s??'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
 
 const PROCS = [
@@ -631,16 +635,21 @@ function pintarRota(el,r){
   el.querySelector('.ac').style.background = at.cor;
 
   texto(el.querySelector('.idr b'), r.rota);
+  const a = r.auditoria;
+  const emAduana = /aduana|auditor/i.test(r.processo||'');
   html(el.querySelector('.idr .sub'), `doca ${esc(r.doca||'–')}${r.onda!=null?` · onda ${r.onda}`:''}${
     r.transportadora?`<br>${esc(r.transportadora)}`:''}${
-    r.auditoria&&r.auditoria.faltantes?`<br><span class="falt">${r.auditoria.faltantes} faltante${r.auditoria.faltantes>1?'s':''} na aduana</span>`:''}`);
+    a&&a.rep?`<br><span class="rep${emAduana?' ativo':''}" title="${emAduana?'auditando agora':'fez a aduana'}">${emAduana?'▶ ':''}${esc(a.rep)}</span>`
+      :(emAduana?`<br><span class="rep"><em>aguardando casar a auditoria…</em></span>`:'')}${
+    a&&a.faltantes?`<br><span class="falt">${a.faltantes} faltante${a.faltantes>1?'s':''} na aduana</span>`:''}`);
 
   el.querySelector('.pill i').style.background = at.cor;
   texto(el.querySelector('.pill .nm'), r.processo||'–');
 
-  // trilha
-  const fases = (r.fases||[]).filter(f=>f.min!=null).map(f=>({p:f.processo,m:f.min||0}));
-  fases.push({p:r.processo,m:tp,viva:true});
+  // trilha: fases fundidas (processo repetido em sequência vira um só, o atual é o último)
+  const limpas = fasesLimpas(r);
+  const fases = limpas.map((f,i)=>({p:f.processo, m:f.min||0, viva: !r.finalizada && i===limpas.length-1}));
+  if (!fases.length) fases.push({p:r.processo, m:tp, viva:true});
   const soma = fases.reduce((a,f)=>a+f.m,0)||1;
   const tr = el.querySelector('.trilha');
   if (tr.dataset.chave !== fases.map(f=>f.p).join('|')){
@@ -885,6 +894,7 @@ function desenharAnalise(){
         (x.auditoria.faltantesIds||[]).forEach(i=>r2.ids.push({id:i, rota:x.rota, dia:d.data, ciclo:d.ciclo}));
       }
       const tot = x.totalMin ?? x.ttMin;
+      if (tot!=null && tot>48*60) return;   // leitura absurda (ID lido como tempo)
       const seq = fasesLimpas(x);
       seq.forEach(f=>{ if (f.min!=null && !f.inferida && !/antes da grava/i.test(f.processo||'')) fases.push({p:f.processo, m:f.min, dia:d.data, ciclo:d.ciclo, rota:x.rota}); });
       if (x.finalizada && tot!=null){
@@ -1090,7 +1100,8 @@ function dadosDemo(dia){
     ondas:[{onda:1,finalizou:'14:22',pct:85,pendentes:6,despachadas:35},{onda:2,pendentes:0,despachadas:49,concluida:true},
            {onda:3,finalizou:'15:22',pct:89,pendentes:6,despachadas:47},{onda:4,finalizou:'15:37',pct:87,pendentes:7,despachadas:45}],
     rotas:{}, eventos:[] };
-  [R('VV12_PM1','93',1,'Aduana em andamento',17,17,[]),
+  [Object.assign(R('VV12_PM1','93',1,'Aduana em andamento',17,17,[]),
+     {transportadora:'DECARGO', placa:'TZU9E44', area:'Comercial', spr:39, auditoria:{rep:'Joao Felipe Sousa De Sousa',status:'in_progress',min:11.8,unidades:53,corretas:52,faltantes:1,avariadas:0,aMais:0,faltantesIds:['47972748324']}}),
    R('VV19_PM1','64',1,'Aduana em andamento',14,33,[{processo:'Carregando pacotes',min:19}]),
    Object.assign(R('M13_PM1','62',2,'Carregando pacotes',6,40,[{processo:'Aguardando doca',min:34}]),
      {transportadora:'A L C TRANSPORTES', placa:'TZG9I86', area:'Distante', spr:90, auditoria:{rep:'Marlon Ferreira Barbosa',status:'finished',min:12,unidades:132,corretas:132,faltantes:0,avariadas:0,aMais:0,faltantesIds:[]}}),
