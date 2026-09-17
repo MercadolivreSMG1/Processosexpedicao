@@ -670,10 +670,24 @@ function curto(p){
   return String(p||'').replace(/\s+em andamento/i,'').replace(/Carregando pacotes/i,'Carregando').replace(/Aguardando/i,'Aguard.');
 }
 
+/* junta fases repetidas em sequência (o painel do adminml oscila entre
+   estados parecidos) e descarta as de menos de um minuto */
+function fasesLimpas(x){
+  const brutas = [...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}]
+    .filter(f=>f && valido(f.processo));
+  const out = [];
+  brutas.forEach(f=>{
+    const u = out[out.length-1];
+    if (u && u.processo===f.processo){ u.min = Math.max(u.min||0, f.min||0); return; }
+    out.push({processo:f.processo, min:f.min, inferida:f.inferida});
+  });
+  const firmes = out.filter(f=>f.min==null || f.min>=1);
+  return firmes.length ? firmes : out;
+}
+
 /* sequência de processos como etiquetas separadas */
 function seqChips(x){
-  const fases = [...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}]
-    .filter(f=>f && f.min!=null && valido(f.processo));
+  const fases = fasesLimpas(x).filter(f=>f.min!=null);
   if (!fases.length) return '<span class="rot">–</span>';
   return `<div class="seq">${fases.map(f=>{
     const c = proc(f.processo);
@@ -794,6 +808,7 @@ $('#btCfg').onclick = () => {
 
 /* ---------- análise multi-dia ---------- */
 const an = { janela:1, ciclo:'todos', repCiclo:'todos', docs:null, carregando:false, chave:'' };
+const cacheDias = {};   // dia -> {ts, ciclos}
 
 async function pintarAnalise(){
   const chave = an.janela+'|'+estado.data+'|'+(cfg.firebase||'local');
@@ -808,8 +823,14 @@ async function carregarAnalise(){
     an.janela===1 ? 'lendo o dia '+estado.data.split('-').reverse().join('/') : 'lendo os últimos '+an.janela+' dias'}</div>`;
   const dias = an.janela===1 ? [estado.data] : (await diasGravados()).slice(0, an.janela);
   const docs = [];
+  const hoje = hojeISO();
   for (const dia of dias){
-    try { Object.values(await buscarDia(dia)).forEach(d => { if (d && d.rotas) docs.push(d); }); } catch(e){}
+    // dia passado não muda mais: lê do cache; hoje é relido a cada 60 s
+    const c = cacheDias[dia];
+    let ciclos;
+    if (c && (dia !== hoje || Date.now()-c.ts < 60000)) ciclos = c.ciclos;
+    else { try { ciclos = await buscarDia(dia); cacheDias[dia] = {ts:Date.now(), ciclos}; } catch(e){ ciclos = {}; } }
+    Object.values(ciclos).forEach(d => { if (d && d.rotas) docs.push(d); });
   }
   an.docs = docs; an.carregando = false;
   desenharAnalise();
@@ -864,8 +885,8 @@ function desenharAnalise(){
         (x.auditoria.faltantesIds||[]).forEach(i=>r2.ids.push({id:i, rota:x.rota, dia:d.data, ciclo:d.ciclo}));
       }
       const tot = x.totalMin ?? x.ttMin;
-      const seq = [...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}].filter(Boolean);
-      seq.forEach(f=>{ if (f.min!=null && valido(f.processo) && !/antes da grava/i.test(f.processo||'')) fases.push({p:f.processo, m:f.min, dia:d.data, ciclo:d.ciclo, rota:x.rota}); });
+      const seq = fasesLimpas(x);
+      seq.forEach(f=>{ if (f.min!=null && !f.inferida && !/antes da grava/i.test(f.processo||'')) fases.push({p:f.processo, m:f.min, dia:d.data, ciclo:d.ciclo, rota:x.rota}); });
       if (x.finalizada && tot!=null){
         totais.push(tot);
         (porDia[d.data] = porDia[d.data]||[]).push(tot);
@@ -1046,7 +1067,7 @@ function ligarAnalise(fases){
     const l = [['dia','ciclo','rota','onda','doca','transportadora','placa','area','spr','aduana_rep','aduana_min','faltantes','processo','minutos'].join(';')];
     (an.docs||[]).filter(d=>an.ciclo==='todos'||d.ciclo===an.ciclo).forEach(d=>{
       Object.values(d.rotas||{}).forEach(x=>{
-        [...(x.fases||[]), x.finalizada?null:{processo:x.processo,min:x.tpMin}].filter(Boolean)
+        fasesLimpas(x)
           .forEach(f=>l.push([d.data,d.ciclo,x.rota,x.onda??'',x.doca||'',x.transportadora||'',x.placa||'',x.area||'',x.spr??'',
             (x.auditoria&&x.auditoria.rep)||'', (x.auditoria&&x.auditoria.min)??'', (x.auditoria&&x.auditoria.faltantes)??'',
             f.processo,f.min??''].join(';')));
