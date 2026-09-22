@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gerar sessao.json · Monitor de processos</title>
+<style>
+  :root{--amarelo:#FFE600;--azul:#3483FA;--verde:#00A650;--vermelho:#F23D4F;--tinta:#14181F;--mudo:#6C7681;--borda:#E3E7EC}
+  *{box-sizing:border-box}
+  body{margin:0;background:#EEF1F5;color:var(--tinta);font:15px/1.5 Inter,system-ui,sans-serif}
+  .barra{background:var(--amarelo);padding:14px 22px;font-weight:600;font-size:17px}
+  .barra small{font-weight:500;color:#5a5200;margin-left:8px}
+  main{max-width:820px;margin:26px auto;padding:0 16px}
+  .cx{background:#fff;border:1px solid var(--borda);border-radius:14px;padding:18px 20px;margin-bottom:14px;box-shadow:0 6px 20px rgba(16,29,54,.05)}
+  h2{margin:0 0 8px;font-size:16px}
+  ol{margin:8px 0 0 18px;padding:0}li{margin:6px 0}
+  kbd{background:#F3F5F8;border:1px solid var(--borda);border-radius:6px;padding:1px 7px;font:600 12.5px monospace}
+  textarea{width:100%;min-height:150px;border:1px solid var(--borda);border-radius:10px;padding:12px;font:12.5px/1.45 monospace;resize:vertical}
+  button{background:var(--azul);color:#fff;border:0;border-radius:10px;padding:11px 18px;font:600 14px Inter;cursor:pointer;margin-top:10px}
+  button:disabled{background:#B9C4D3;cursor:default}
+  .ok{color:var(--verde);font-weight:600}.erro{color:var(--vermelho);font-weight:600}
+  .mudo{color:var(--mudo);font-size:13px}
+  .lista{font:12.5px monospace;color:var(--mudo);max-height:140px;overflow:auto;background:#F7F9FB;border-radius:8px;padding:8px 10px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="barra">Gerar sessao.json <small>Monitor de processos · Expedição SMG1</small></div>
+<main>
+  <div class="cx">
+    <h2>1. Copiar a sessão do Chrome (sem instalar nada)</h2>
+    <ol>
+      <li>Abra <b>envios.adminml.com/logistics/last-mile/monitoring/dispatch</b> logado.</li>
+      <li>Aperte <kbd>F12</kbd> → aba <b>Network</b> (Rede). Aperte <kbd>F5</kbd> para a lista encher.</li>
+      <li>Clique com o botão direito na <b>primeira linha</b> da lista (o nome é <code>dispatch</code>) → <b>Copy</b> → <b>Copy as cURL (bash)</b>. No Chrome em português: <b>Copiar</b> → <b>Copiar como cURL (bash)</b>.</li>
+      <li>Cole abaixo.</li>
+    </ol>
+    <p class="mudo">O que interessa é a linha <code>-H 'cookie: …'</code>. Nada sai deste computador: a conversão acontece no seu navegador e o arquivo é baixado direto.</p>
+    <textarea id="entrada" placeholder="curl 'https://envios.adminml.com/logistics/…' -H 'cookie: …' …"></textarea>
+    <div id="status" class="mudo" style="margin-top:8px">Aguardando…</div>
+    <div id="lista" class="lista" style="display:none"></div>
+    <button id="baixar" disabled>Baixar sessao.json</button>
+  </div>
+
+  <div class="cx">
+    <h2>2. Colocar no GitHub</h2>
+    <ol>
+      <li>Abra o <code>sessao.json</code> baixado no Bloco de Notas → <kbd>Ctrl+A</kbd> <kbd>Ctrl+C</kbd>.</li>
+      <li>No repositório: <b>Settings → Secrets and variables → Actions → New repository secret</b>.</li>
+      <li>Name: <code>SESSAO_MELI</code> · Secret: colar · <b>Add secret</b>.</li>
+      <li>Aba <b>Actions → robo-monitor-processos → Run workflow</b>.</li>
+    </ol>
+    <p class="mudo">Quando o painel avisar que a sessão venceu, repita o passo 1 e atualize o secret.</p>
+  </div>
+</main>
+
+<script>
+const entrada = document.getElementById('entrada'), status = document.getElementById('status'),
+      lista = document.getElementById('lista'), baixar = document.getElementById('baixar');
+let sessao = null;
+
+function extrairCookieHeader(txt){
+  // -H 'cookie: a=b; c=d'   |   -H "Cookie: …"   |   -b 'a=b; c=d'   |   cabeçalho cru "cookie: …"   |   só "a=b; c=d"
+  const re = /-H\s+(['"])\s*cookie:\s*([\s\S]*?)\1/i;
+  let m = txt.match(re); if (m) return m[2];
+  m = txt.match(/-b\s+(['"])([\s\S]*?)\1/); if (m) return m[2];
+  m = txt.match(/^\s*cookie:\s*(.+)$/im); if (m) return m[1];
+  if (/^[^\s=;]+=[^;]*(;\s*[^\s=;]+=[^;]*)*\s*$/.test(txt.trim())) return txt.trim();
+  return null;
+}
+
+function montar(header){
+  const pares = header.split(/;\s*/).map(s=>s.trim()).filter(Boolean);
+  const cookies = [];
+  for (const p of pares){
+    const i = p.indexOf('='); if (i <= 0) continue;
+    const name = p.slice(0,i).trim(), value = p.slice(i+1).trim();
+    if (!name) continue;
+    // sem info de domínio no cabeçalho: .adminml.com cobre envios.adminml.com e os subdomínios do login
+    cookies.push({ name, value, domain: '.adminml.com', path: '/', expires: -1, httpOnly: false, secure: true, sameSite: 'Lax' });
+  }
+  return { cookies, origins: [] };
+}
+
+entrada.addEventListener('input', () => {
+  sessao = null; baixar.disabled = true; lista.style.display = 'none';
+  const txt = entrada.value;
+  if (!txt.trim()){ status.textContent = 'Aguardando…'; status.className = 'mudo'; return; }
+  const header = extrairCookieHeader(txt);
+  if (!header){ status.textContent = 'Não achei a linha de cookie. Confira se copiou como cURL (bash) — a opção "cmd" vem com aspas diferentes e não serve.'; status.className = 'erro'; return; }
+  const s = montar(header);
+  if (s.cookies.length < 3){ status.textContent = `Só ${s.cookies.length} cookie(s) — parece incompleto. Copie da linha "dispatch" com a página logada.`; status.className = 'erro'; return; }
+  const nomes = s.cookies.map(c=>c.name);
+  const temMeli = nomes.some(n => /^(ssid|orguseridp|_d2id|orgnickp|orgapi|__oct|ftid|_csrf)/i.test(n) || /meli|ml_|mp_|adminml/i.test(n));
+  sessao = s;
+  status.innerHTML = `<span class="ok">${s.cookies.length} cookies capturados.</span> ${temMeli ? '' : '<span class="mudo">(não reconheci nomes típicos do Meli — pode funcionar mesmo assim; teste no Actions)</span>'}`;
+  lista.textContent = nomes.join('  ·  ');
+  lista.style.display = 'block';
+  baixar.disabled = false;
+});
+
+baixar.addEventListener('click', () => {
+  if (!sessao) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(sessao)], {type:'application/json'}));
+  a.download = 'sessao.json'; a.click();
+  status.innerHTML = '<span class="ok">Baixado.</span> Agora o passo 2.';
+});
+</script>
+</body>
+</html>
