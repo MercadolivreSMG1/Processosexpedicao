@@ -1,12 +1,17 @@
 # Robô · Monitor de processos Expedição (SMG1) — ARQUIVO ÚNICO
-# Cole como  .github/workflows/robo.yml  . O coletor e o robô vão embutidos
-# aqui (base64+gzip); não precisa subir mais nada.
-# O secret SESSAO_MELI aceita tanto o sessao.json quanto o "Copy as cURL (bash)".
+# Cole como  .github/workflows/robo.yml
+#
+# Secrets necessários (Settings > Secrets and variables > Actions):
+#   SESSAO_MELI   = o "Copy as cURL (bash)" da tela do dispatch (ou o sessao.json)
+#   SESSAO_CHAVE  = uma senha qualquer, longa, inventada por você (cifra a sessão renovada)
+#
+# O robô guarda a sessão renovada em robo/sessao.enc (cifrada) e comita de volta:
+# assim ela se renova a cada execução em vez de morrer em horas.
 name: robo-monitor-processos
 
 on:
   schedule:
-    - cron: "*/5 * * * *"        # a cada 5 min (o GitHub costuma atrasar para 8–15)
+    - cron: "*/10 * * * *"
   workflow_dispatch:
     inputs:
       sonda:
@@ -19,13 +24,15 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write           # para comitar a sessão renovada (cifrada)
 
 jobs:
   coletar:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -34,7 +41,7 @@ jobs:
         run: |
           mkdir -p robo
           cat > coletor.b64 <<'FIM_COLETOR'
-          H4sIAG2hsmoC/719y24bWZbg3l9xraouRqSpkCjZTidpyVDacqWn/ILtzJ5uWWkEGUEqLDKCGRGkZVtq9GoWs+zuWXRjgJlED1CoBmqVAzRQy9
+          H4sIAPKhsmoC/719y24bWZbg3l9xraouRqSpkCjZTidpyVDacqWn/ILtzJ5uWWkEGUEqLDKCGRGkZVtq9GoWs+zuWXRjgJlED1CoBmqVAzRQy9
           af1BfMJ8x53HcEKWVVoV2VIhlxn+eee9733GC8yEd1VuQiCMXnG0J0FlUqqrrMRnVncAMebH0h9v6Mf9AC/Hv24vmTNy9eiUeH4sXzRwevxX/8
           u3j97Nc98ce//ycxKqZpXZQiGMfLoszqIuRKLy9/nGR53BdpvsyKKoqTWZbPptGomG1Ni0lW1dmo2prGVb05y6bp1qzIoXKZ5ZOtJKvmcT064Y
           aeXv6biCtR5An8TUUs6niYTmORpKIs6rjqCqhax/BimuUn8LwQdTqbF1hgFCcxtzIvi1FaVYUIHsZlmU7iHMrN41FRp9DCQbKI87gr0noUhV1R
@@ -252,73 +259,84 @@ jobs:
           MZWORURwNQK9P41M1fRxQZS4SmXPPEwqp7cjkZIFZWNgr6tcp2wmsor7jyLwDkE0v89/8D3xYay5jgAAA=
           FIM_COLETOR
           cat > robo.b64 <<'FIM_ROBO'
-          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
+          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
+          155dba/wJuErU6PUYAAA==
           FIM_ROBO
           tr -d ' \n' < coletor.b64 | base64 -d | gunzip > coletor.js
           tr -d ' \n' < robo.b64    | base64 -d | gunzip > robo/robo.js
@@ -340,14 +358,14 @@ jobs:
         working-directory: robo
         run: npx playwright install --with-deps chromium
 
-      - name: Sessão do Meli (secret SESSAO_MELI)
+      - name: Sessão do Meli
         working-directory: robo
         env:
           SESSAO_MELI: ${{ secrets.SESSAO_MELI }}
         run: |
-          if [ -z "$SESSAO_MELI" ]; then echo "::error::O secret SESSAO_MELI está vazio. Crie em Settings > Secrets and variables > Actions."; exit 2; fi
+          if [ -z "$SESSAO_MELI" ]; then echo "::error::O secret SESSAO_MELI está vazio."; exit 2; fi
           printf '%s' "$SESSAO_MELI" > sessao.json
-          echo "secret recebido ($(wc -c < sessao.json) bytes)"
+          if [ -f sessao.enc ]; then echo "sessão renovada encontrada no repositório"; else echo "primeira execução: usando o secret"; fi
 
       - name: Coletar (uma passada em todos os ciclos)
         working-directory: robo
@@ -356,9 +374,26 @@ jobs:
           FIREBASE: https://expedicaoprojeto1-default-rtdb.firebaseio.com
           PAINEL: https://mercadolivresmg1.github.io/Processosexpedicao/
           OPERADOR: Robô GitHub
+          SESSAO_CHAVE: ${{ secrets.SESSAO_CHAVE }}
           PROBE: ${{ inputs.sonda && '1' || '0' }}
         run: node robo.js uma-vez
 
-      - name: Limpar sessão do runner
+      - name: Guardar a sessão renovada (cifrada)
         if: always()
-        run: rm -f robo/sessao.json
+        run: |
+          rm -f robo/sessao.json robo/*.b64
+          if [ -n "$(git status --porcelain robo/sessao.enc)" ]; then
+            git config user.name "robo-processos"
+            git config user.email "robo@users.noreply.github.com"
+            git add robo/sessao.enc
+            git commit -m "sessão renovada [skip ci]" -q
+            git pull --rebase -q || true
+            git push -q && echo "sessão renovada guardada no repositório"
+          else
+            echo "sessão sem mudança"
+          fi
+
+      - name: Se falhou, avisar o que fazer
+        if: failure()
+        run: |
+          echo "::error title=Robô falhou::Se o motivo foi sessão expirada: 1) na tela do dispatch, F12 > Network > botão direito em waves-status > Copy as cURL (bash); 2) Settings > Secrets and variables > Actions > SESSAO_MELI > Update secret; 3) apague o arquivo robo/sessao.enc no repositório; 4) Actions > Run workflow."
